@@ -32,6 +32,8 @@ export class Engine {
     const entry=this.services().find(s=>s.id===service && s.enabled);
     if(!entry)throw new ApiError('service_unavailable',503);
     let recipient=input.to||input.phone;
+    const ownedInbox=['email.send','email.reply'].includes(service)?this.store.resource(input.inboxId,auth):null;
+    if(['email.send','email.reply'].includes(service) && ownedInbox?.kind!=='inbox')throw new ApiError('inbox_not_found',404);
     if(service==='email.inbox' && this.store.inboxes(auth).length)throw new ApiError('inbox_already_available_use_get_inboxes',409);
     if(service==='email.reply'){
       if(!this.store.resource(input.inboxId,auth))throw new ApiError('inbox_not_found',404);
@@ -42,7 +44,8 @@ export class Engine {
     }
     if(['email.send','email.reply','phone.call'].includes(service)) {
       const allow=(this.env.WIKSHI_TESTNET_RECIPIENTS||'').split(',').map(x=>x.trim().toLowerCase());
-      if(!allow.includes(recipient.toLowerCase()))throw new ApiError('recipient_not_approved_for_testnet',403);
+      const selfTest=ownedInbox?.address?.toLowerCase()===recipient.toLowerCase();
+      if(!selfTest && !allow.includes(recipient.toLowerCase()))throw new ApiError('recipient_not_approved_for_testnet',403);
     }
     if(service==='email.send' && !this.store.resource(input.inboxId,auth))throw new ApiError('inbox_not_found',404);
     const amount=(BigInt(entry.rateAtomic)*BigInt(entry.unit==='second'?input.maxSeconds:1)).toString();
