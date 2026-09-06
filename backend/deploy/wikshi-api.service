@@ -11,6 +11,9 @@ WorkingDirectory=/opt/wikshi/backend
 ExecStart=/opt/wikshi-node/bin/node src/server.mjs
 Environment=NODE_ENV=production
 Environment=PORT=8080
+EnvironmentFile=/etc/wikshi/backend.env
+StateDirectory=wikshi
+ReadWritePaths=/var/lib/wikshi
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
