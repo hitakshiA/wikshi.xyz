@@ -19,11 +19,19 @@ export class Providers {
   mail(path,method='GET',body,idempotencyKey) {return this.request(`https://api.resend.com${path}`,{method,body,headers:{Authorization:`Bearer ${this.env.RESEND_API_KEY}`,...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})}});}
   phone(path,method='GET',body) {return this.request(`https://api.agentphone.ai/v1${path}`,{method,body,headers:{Authorization:`Bearer ${this.env.AGENTPHONE_API_KEY}`}});}
   provisionInbox(payer,auth,store,displayName='Wikshi agent') {
-    const existing=store.payerInbox(payer);if(existing)return store.createPayerInbox(payer,auth,existing);
+    let existing=store.payerInbox(payer);
+    if(existing){
+      if(/^agent-[a-f0-9]{32}@/.test(existing.address)){
+        const address=`hello-${existing.id.slice(0,8)}@${existing.address.split('@')[1]}`;
+        if(!store.inboxForAddress(address))existing=store.renameInbox(payer,address);
+      }
+      return store.createPayerInbox(payer,auth,existing);
+    }
     const domain=this.env.WIKSHI_EMAIL_DOMAIN;
     if(this.env.WIKSHI_EMAIL_READY!=='true' || !this.env.RESEND_API_KEY || !this.env.RESEND_WEBHOOK_SECRET || !/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i.test(domain||''))return null;
-    const id=randomUUID();
-    return store.createPayerInbox(payer,auth,{id,kind:'inbox',displayName,address:`agent-${id.replaceAll('-','')}@${domain.toLowerCase()}`,createdAt:new Date().toISOString()});
+    let id,address;
+    do{id=randomUUID();address=`hello-${id.slice(0,8)}@${domain.toLowerCase()}`;}while(store.inboxForAddress(address));
+    return store.createPayerInbox(payer,auth,{id,kind:'inbox',displayName,address,createdAt:new Date().toISOString()});
   }
   async execute(op,store) {
     const {service,input}=op.data;
@@ -65,7 +73,7 @@ export class Providers {
       const to=message?.replyTo||message?.from||input.to;
       const subject=message?`Re: ${message.subject}`.slice(0,200):input.subject;
       const headers=message?.rfcMessageId?{'In-Reply-To':message.rfcMessageId,References:message.rfcMessageId}:undefined;
-      const data=await this.mail('/emails','POST',{from:inbox.address,to:[to],subject,text:input.text,reply_to:inbox.address,...(headers?{headers}:{})},op.id);
+      const data=await this.mail('/emails','POST',{from:`Wikshi agent <${inbox.address}>`,to:[to],subject,text:input.text,reply_to:inbox.address,...(headers?{headers}:{})},op.id);
       if(!data.id)throw new ProviderError(true);
       const messageId=store.putMessage(inbox.id,`outbound:${op.id}`,{direction:'outbound',from:inbox.address,to:[to],subject,text:input.text,status:'accepted',createdAt:new Date().toISOString()});
       return {done:true,result:{messageId,status:'accepted'}};

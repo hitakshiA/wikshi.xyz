@@ -52,11 +52,15 @@ export function createApi(engine) {
       '/meet':['../public/meet.html','text/html; charset=utf-8'],
       '/static/meeting.js':['../public/meeting.js','text/javascript'],
       '/static/meeting.css':['../public/meeting.css','text/css'],
+      '/static/bird.png':['../../public/wikshi/art/bird-wave-cutout.png','image/png'],
+      '/static/meeting-bird.png':['../../public/wikshi/art/meeting-cutout.png','image/png'],
+      '/static/funnel.woff2':['../../public/sites/inkbox-ai-e8043030/root-8a5edab2/s/funneldisplay/v3/B50WF7FGv37QNVWgE0ga--4Pbb6dDYs0gnHA.woff2','font/woff2'],
+      '/static/geist.woff2':['../../public/sites/inkbox-ai-e8043030/root-8a5edab2/s/geist/v5/gyByhwUxId8gMEwcGFWNOITd.woff2','font/woff2'],
       '/static/livekit.js':['../node_modules/livekit-client/dist/livekit-client.umd.js','text/javascript'],
     };
     if(req.method==='GET' && files[req.url]){
       const [path,type]=files[req.url];res.setHeader('Content-Type',type);
-      res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' wss:; media-src 'self' blob:; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+      res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self' https://*.livekit.cloud wss:; media-src 'self' blob:; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
       res.end(readFileSync(new URL(path,import.meta.url)));return;
     }
     if(req.method==='POST' && req.url==='/v1/meetings/join'){

@@ -16,6 +16,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, auth TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS resource_grants (resource TEXT NOT NULL, auth TEXT NOT NULL, PRIMARY KEY(resource,auth));
       CREATE TABLE IF NOT EXISTS payer_inboxes (payer TEXT PRIMARY KEY, resource TEXT NOT NULL UNIQUE, address_hash TEXT NOT NULL UNIQUE);
+      CREATE TABLE IF NOT EXISTS inbox_aliases (address_hash TEXT PRIMARY KEY, resource TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS verified_payers (auth TEXT NOT NULL, payer TEXT NOT NULL, PRIMARY KEY(auth,payer));
       CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, inbox TEXT NOT NULL, source TEXT NOT NULL, created INTEGER NOT NULL, data TEXT NOT NULL, UNIQUE(inbox,source));
       CREATE TABLE IF NOT EXISTS mail_events (id TEXT PRIMARY KEY, received INTEGER NOT NULL);
@@ -67,8 +68,20 @@ export class Store {
     });
   }
   inboxForAddress(address) {
-    const row=this.db.prepare('SELECT r.id,r.data FROM resources r JOIN payer_inboxes p ON p.resource=r.id WHERE p.address_hash=?').get(hash(address.toLowerCase()));
+    const digest=hash(address.toLowerCase());
+    const row=this.db.prepare('SELECT r.id,r.data FROM resources r WHERE r.id IN (SELECT resource FROM payer_inboxes WHERE address_hash=? UNION SELECT resource FROM inbox_aliases WHERE address_hash=?)').get(digest,digest);
     return row?this.open(row.data,row.id):null;
+  }
+  renameInbox(payer,address) {
+    return this.atomic(()=>{
+      const inbox=this.payerInbox(payer);if(!inbox)throw new Error('inbox_not_found');
+      const occupied=this.inboxForAddress(address);if(occupied && occupied.id!==inbox.id)throw new Error('address_unavailable');
+      this.db.prepare('INSERT OR IGNORE INTO inbox_aliases VALUES(?,?)').run(hash(inbox.address.toLowerCase()),inbox.id);
+      inbox.address=address.toLowerCase();
+      this.db.prepare('UPDATE resources SET data=? WHERE id=?').run(this.seal(inbox,inbox.id),inbox.id);
+      this.db.prepare('UPDATE payer_inboxes SET address_hash=? WHERE payer=?').run(hash(inbox.address),payer);
+      return inbox;
+    });
   }
   inboxes(auth) {return this.db.prepare("SELECT id,data FROM resources WHERE auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?)").all(auth,auth).map(r=>this.open(r.data,r.id)).filter(r=>r.kind==='inbox').map(r=>({id:r.id,address:r.address,displayName:r.displayName}));}
   putMessage(inbox,source,data) {

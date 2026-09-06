@@ -123,6 +123,17 @@ test('encryption survives reopening and hides mission in database bytes',async()
   assert.equal(readFileSync(file).includes(Buffer.from('PRIVATE-MISSION-DO-NOT-LEAK')),false);
   const b=new Store(file,key);assert.equal(b.get('test').data.mission,'PRIVATE-MISSION-DO-NOT-LEAK');b.close();
 });
+test('definitive admission denial queues full refund; uncertain admission does not',async()=>{
+  for(const uncertain of [false,true]){
+    const {engine,store,providers}=setup();const op=await quote(engine),guest=randomBytes(32).toString('base64url');
+    op.state='awaiting_guest';op.data.private={agentId:'private'};op.data.guestExpires=Date.now()+100000;store.save(op);
+    store.db.prepare('INSERT INTO guests(hash,operation) VALUES(?,?)').run(hash(guest),op.id);
+    providers.join=async()=>{throw new ProviderError(uncertain);};
+    await assert.rejects(engine.join(guest),/meeting_connection_unavailable/);
+    const saved=store.get(op.id);assert.equal(saved.state,uncertain?'execution_unknown':'failed');
+    assert.equal(saved.data.refund?.amount,uncertain?undefined:op.data.requirements.amount);
+  }
+});
 test('input rejects arbitrary upstream URLs, overlong meetings and missing consent',()=>{
   assert.throws(()=>validate('discovery.search',{query:'research',limit:2,url:'http://127.0.0.1'}),/invalid_input/);
   assert.throws(()=>validate('phone.call',{phone:'+15551234567',mission:'Ask about the project',maxSeconds:360,consent:true}),/invalid_mission/);

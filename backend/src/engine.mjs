@@ -157,7 +157,12 @@ export class Engine {
     try {
       const output=await this.providers.join(op);op.data.private.callId=output.callId;op.state='running';this.store.save(op);
       return {connection:output.connection,maxSeconds:op.data.input.maxSeconds};
-    } catch {op.state='execution_unknown';op.data.error='meeting_requires_reconciliation';this.store.save(op);throw new ApiError('meeting_connection_unavailable',503);}
+    } catch(error) {
+      if(error.name==='Error' && error.message==='service_execution_failed' && !error.uncertain){
+        this.fail(op,'meeting_connection_unavailable');op.data.cleanupPending=true;this.store.save(op);
+      }else{op.state='execution_unknown';op.data.error='meeting_requires_reconciliation';this.store.save(op);}
+      throw new ApiError('meeting_connection_unavailable',503);
+    }
   }
   async cancel(id,credential) {
     const op=this.authorize(id,credential);

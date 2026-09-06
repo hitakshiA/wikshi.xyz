@@ -63,7 +63,7 @@ export function catalog(env) {
     ['email.reply','Reply to an owned inbox message','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
     // No documented provider-enforced duration cap. Never sell bounded calls on a prompt alone.
     ['phone.call','Make a bounded voice call','WIKSHI_PRICE_PHONE_SECOND',false,'second'],
-    ['video.meeting','One-use video conversation','WIKSHI_PRICE_VIDEO_SECOND',Boolean(env.BEY_API_KEY && env.BEY_AVATAR_ID),'second'],
+    ['video.meeting','One-use video conversation','WIKSHI_PRICE_VIDEO_SECOND',Boolean(env.BEY_API_KEY && env.BEY_AVATAR_ID && env.WIKSHI_VIDEO_API_READY==='true'),'second'],
   ];
   return entries.map(([id,name,rateKey,ready,unit])=>({id,name,unit,rateAtomic:price(rateKey),currency:'USDC',decimals:6,maxSeconds:unit==='second'?180:undefined,
     enabled:Boolean(ready && price(rateKey) && env.WIKSHI_MERCHANT_ACCOUNT && env.WIKSHI_MERCHANT_KEY),

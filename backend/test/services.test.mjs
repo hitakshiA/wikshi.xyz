@@ -87,7 +87,7 @@ test('Resend send and reply use owned address, idempotency and original thread h
   const messageId=store.putMessage(inbox.id,'inbound:a',{direction:'inbound',from:'a@example.com',subject:'Question',text:'Hello',rfcMessageId:'<original@example.com>'});
   const op={id:randomUUID(),auth:'owner',data:{service:'email.reply',input:{inboxId:inbox.id,messageId,text:'My answer'}}};
   const result=await p.execute(op,store);assert.equal(requests[0].url,'https://api.resend.com/emails');
-  assert.equal(requests[0].body.from,inbox.address);assert.equal(requests[0].body.headers['In-Reply-To'],'<original@example.com>');
+  assert.equal(requests[0].body.from,`Wikshi agent <${inbox.address}>`);assert.equal(requests[0].body.headers['In-Reply-To'],'<original@example.com>');
   assert.equal(requests[0].options.headers['Idempotency-Key'],op.id);assert.equal(JSON.stringify(result).includes('private-transport-id'),false);
   await assert.rejects(p.execute({...op,auth:'stranger'},store));
 });
@@ -95,4 +95,21 @@ test('private message pagination does not skip same-millisecond arrivals',()=>{
   const store=makeStore();for(let i=0;i<43;i++)store.putMessage('inbox',String(i),{text:String(i)});
   const first=store.messages('inbox'),second=store.messages('inbox',first.at(-1).cursor),third=store.messages('inbox',second.at(-1).cursor);
   assert.equal(new Set([...first,...second,...third].map(m=>m.id)).size,43);
+});
+test('legacy address upgrade preserves aliases, messages and private ownership',()=>{
+  const store=makeStore(),p=new Providers(env),id=randomUUID();
+  const old={id,kind:'inbox',address:`agent-${id.replaceAll('-','')}@mail.wikshi.xyz`,displayName:'Wikshi agent'};
+  store.createPayerInbox('0.0.111','owner',old);store.putMessage(id,'old-thread',{text:'Keep this'});
+  const fresh=p.provisionInbox('0.0.111','owner',store);
+  assert.match(fresh.address,/^hello-[a-f0-9]{8}@/);
+  assert.equal(store.inboxForAddress(old.address).id,id);assert.equal(store.inboxForAddress(fresh.address).id,id);
+  assert.equal(store.messages(id)[0].text,'Keep this');assert.equal(store.resource(id,'stranger'),null);
+  const other=p.provisionInbox('0.0.222','other',store);
+  assert.throws(()=>store.renameInbox('0.0.222',old.address),/address_unavailable/);
+  assert.equal(store.payerInbox('0.0.222').address,other.address);
+});
+test('video quotes require explicit confirmed API entitlement',()=>{
+  const config={BEY_API_KEY:'fixture',BEY_AVATAR_ID:'fixture',WIKSHI_PRICE_VIDEO_SECOND:'1',WIKSHI_MERCHANT_ACCOUNT:'0.0.123',WIKSHI_MERCHANT_KEY:'fixture'};
+  assert.equal(catalog(config).find(s=>s.id==='video.meeting').enabled,false);
+  assert.equal(catalog({...config,WIKSHI_VIDEO_API_READY:'true'}).find(s=>s.id==='video.meeting').enabled,true);
 });
