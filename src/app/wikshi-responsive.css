@@ -1,0 +1,109 @@
+/* Phone-first refinements of the existing Inkbox composition, not a new layout. */
+@media (max-width: 1023px) {
+  .home-nav button[aria-label="Open menu"] { min-width: 44px; min-height: 44px; }
+  #mobile-navigation a, #mobile-navigation button { min-height: 44px; }
+  #mobile-navigation a { color: #f7f4eb; }
+  #mobile-navigation button[aria-label="Workflow skill"] { gap: 12px; }
+  #mobile-navigation [role="dialog"] { max-height: 85dvh !important; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
+  #capabilities a.rounded-full { display: inline-flex; align-items: center; min-height: 44px; }
+  #memory > div:has(> img), #collaboration > div:has(> img) {
+    aspect-ratio: 4 / 3; max-height: 360px;
+  }
+  .page-hero-art > div, .page-section > div { min-width: 0; }
+  .page-index a { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+@media (max-width: 767px) {
+  /* Keep the text and the copy action in separate rows on touch screens. */
+  #quickstart-panel > div:last-child > div { flex-direction: column; }
+  #quickstart-panel > div:last-child > div > div { width: 100%; height: 1px; }
+  #quickstart-panel button { width: 100%; min-height: 48px; }
+  #quickstart-panel button:first-child { padding: 16px; }
+  #quickstart-panel button:last-child { padding: 12px 16px; }
+  #quickstart-panel button p { font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }
+  #quickstart-panel p[aria-hidden="true"] { display: none; }
+  #quickstart-panel > div:first-child { padding: 18px 20px 14px; }
+  main [role="tablist"] { gap: 8px; scroll-padding-inline: 20px; }
+  main [role="tab"] { min-height: 44px; }
+  main > section:first-child h1 { font-size: clamp(34px, 10vw, 43px); text-wrap: balance; }
+  main > section:first-child .wikshi-hero-subtitle { max-width: 34ch; line-height: 1.6; }
+  #chakra-skip-nav > section:first-child > .relative > .relative.flex { padding-top: 36px; padding-bottom: 44px; }
+  #chakra-skip-nav > section:first-child h1 { margin-top: 12px; }
+
+  /* Inner pages use the same gutters and rhythm as the landing page. */
+  .page-hero { padding: 112px 24px 40px; }
+  .page-hero-art { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .page-hero .wikshi-eyebrow { margin-bottom: 18px; font-size: 10px; }
+  .page-hero h1 { font-size: clamp(32px, 9.3vw, 42px); line-height: 1.08; text-wrap: balance; }
+  .page-lead { font-size: 16px; line-height: 1.6; margin: 20px 0 24px; }
+  .page-art { width: 100%; max-width: 300px; height: 200px; object-fit: contain; justify-self: center; }
+  .page-button { min-height: 48px; line-height: 1.4; }
+  .page-body { margin-inline: 12px; }
+  .page-section { grid-template-columns: minmax(0, 1fr); padding: 40px 20px; gap: 20px; scroll-margin-top: 96px; }
+  .page-section h2, .page-next h2 { font-size: clamp(28px, 7.7vw, 34px); line-height: 1.12; text-wrap: balance; }
+  .page-section .wikshi-eyebrow { margin-bottom: 12px; }
+  .page-section h2 { margin: 0; }
+  .page-section-content p, .page-section details p, .page-steps p { font-size: 16px; line-height: 1.65; }
+  .page-section-content .section-intro { font-size: 17px; }
+  .page-index { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 16px 20px; gap: 4px 16px; }
+  .page-index a { display: flex; align-items: center; min-height: 44px; font-size: 14px; line-height: 1.4; }
+  .service-spec > div { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .service-spec dd { font-size: 16px; overflow-wrap: anywhere; }
+  .service-spec dt { font-size: 13px; }
+  .workflow-brief { padding: 20px 16px; }
+  .workflow-brief button { min-height: 48px; width: 100%; }
+  .page-section summary { line-height: 1.5; min-height: 44px; }
+  .mission-source { font-size: 13px; line-height: 1.6; padding-block: 10px; }
+  .page-next { padding: 48px 24px; }
+  .stack-map { padding: 40px 20px; }
+  .stack-map h2 { font-size: 32px; line-height: 1.15; }
+  .stack-core { padding: 28px 16px; }
+  .stack-outputs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stack-outputs > div { padding: 24px 12px; border-bottom: 1px solid #bdc9b3; }
+  .stack-outputs > div:nth-child(even) { border-right: 0; }
+  .stack-outputs > div:nth-last-child(-n+2) { border-bottom: 0; }
+  .stack-outputs h3 { font-size: 19px; }
+  .stack-outputs p { font-size: 14px; }
+
+  /* Readable service copy and compact, intentional illustrations. */
+  #channels p, #memory p, #collaboration p, #control p { font-size: 16px; line-height: 1.6; }
+  #channels p, #channels > div > div { max-width: none; }
+  #channels > div { padding: 24px; }
+  #memory > div:has(> img), #collaboration > div:has(> img) { max-height: 300px; }
+  .wikshi-meetings, .wikshi-metering { padding: 48px 24px; }
+  .meeting-layout, .metering-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .wikshi-new-section h2 { font-size: clamp(30px, 8.2vw, 38px); }
+  .meeting-steps p, .metering-details p { font-size: 16px; line-height: 1.6; }
+  .meeting-steps { gap: 24px; margin-bottom: 0; }
+  .meeting-steps li { gap: 12px; }
+  .meeting-window-bar { padding: 14px 12px; font-size: 12px; }
+  .meeting-preview { transform: none; width: 100%; }
+  .metering-art { width: 260px; margin: 20px auto 0; }
+  .metering-example { padding: 24px 20px; transform: none; width: 100%; min-width: 0; }
+  .receipt-topline { flex-wrap: wrap; font-size: 11px; gap: 12px; }
+  .metering-example h3 { font-size: 27px; margin: 24px 0; }
+  .duration-control label { font-size: 14px; }
+  .duration-control input { height: 44px; margin: 4px 0; }
+  .duration-endpoints { font-size: 12px; }
+  .receipt-lines > div { font-size: 14px; }
+  .receipt-lines dd { font-size: 22px; }
+  .receipt-lines dd small, .receipt-lines dt > small { font-size: 12px; }
+  .receipt-disclaimer { font-size: 12px; line-height: 1.65; }
+  .receipt-perforation { margin-inline: -20px; }
+  .receipt-footnote, .receipt-footnote span { font-size: 12px; }
+  .metering-details { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .metering-details strong { display: block; font-size: 16px; }
+
+  footer .flex.flex-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 16px; }
+  footer .flex.flex-wrap > div { white-space: normal; gap: 4px; }
+  footer .flex.flex-wrap a { display: flex; align-items: center; min-height: 44px; line-height: 1.4; }
+  footer .flex.flex-wrap > div > p { margin-bottom: 12px; }
+}
+
+@media (max-width: 374px) {
+  .page-hero { padding-inline: 20px; }
+  .page-section, .page-index { padding-inline: 16px; }
+  .wikshi-meetings, .wikshi-metering, .wikshi-page .wikshi-metering { padding-inline: 16px; }
+  .receipt-lines .receipt-return { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .stack-payment { font-size: 12px; padding-inline: 12px; }
+}

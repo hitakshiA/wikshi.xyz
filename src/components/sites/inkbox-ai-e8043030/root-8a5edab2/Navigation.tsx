@@ -51,7 +51,7 @@ export function Navigation() {
   }, [open]);
   useEffect(() => {if(width>=1024) setOpen(false);},[width]);
   const expanded=width>=1280?1080:width>=1024?900:Math.max(width-32,280);
-  const collapsed=width>=1280?1024:width>=1024?868:Math.max(expanded-56,240);
+  const collapsed=width>=1280?1024:width>=1024?868:expanded;
   const shellStyle:CSSProperties={borderRadius:16+983*progress,borderColor:`rgba(247,244,235,${.15*progress})`,backgroundColor:`rgba(86,112,90,${1-.15*progress})`,boxShadow:`0 12px 40px rgba(35,62,49,${.2*progress})`,backdropFilter:`blur(${12*progress}px)`,WebkitBackdropFilter:`blur(${12*progress}px)`};
   const options:HTMLReactParserOptions={replace(node){
     if(!(node instanceof Element)) return;
@@ -81,7 +81,7 @@ export function Navigation() {
         if(label==='Close'){setOpen(false);return;}
         const href=label==='Workflow skill'?'/wikshi/skills.md':label==='Overview'?'/docs':'/#quickstart-panel';
         setOpen(false);window.location.assign(href);
-      }}>{children()}</button>;
+      }}>{label === 'Workflow skill' ? <>Workflow skill <span aria-hidden="true">↗</span></> : children()}</button>;
     }
   }};
   return <>{parse(markup.Navigation,options)}{open&&createPortal(<div id="mobile-navigation" ref={menu}>{parse(markup.MobileMenu,menuOptions)}</div>,document.body)}</>;
