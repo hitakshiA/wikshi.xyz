@@ -78,6 +78,21 @@ export function Hero() {
       if (node.name === 'script') return <></>;
       const props = attributesToProps(node.attribs);
       const children = () => domToReact(node.children as DOMNode[], options);
+      if (node.attribs.role === 'tablist') {
+        return <div {...props} className={`${node.attribs.class} quickstart-marquee`}>
+          <div className="quickstart-marquee-track" role="presentation">
+            <div className="quickstart-marquee-group" role="presentation">{children()}</div>
+            <div className="quickstart-marquee-group quickstart-marquee-copy" aria-hidden="true">
+              {tabs.map((tab, index) => <button key={index} type="button" tabIndex={-1}
+                className={tabs[activeTab === index ? 0 : 1].attribs.class}
+                onPointerDown={event => event.preventDefault()}
+                onClick={() => selectTab(index)}>
+                {domToReact(tab.children as DOMNode[], options)}
+              </button>)}
+            </div>
+          </div>
+        </div>;
+      }
       const tabIndex = tabs.indexOf(node);
       if (tabIndex !== -1) {
         return <button {...props}
