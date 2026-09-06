@@ -20,16 +20,8 @@ const paragraphs = allElements.filter((node) => node.name === 'p' && 'aria-hidde
 const commandParagraphs = paragraphs.slice(tabs.length);
 const copyButtons = allElements.filter((node) => node.name === 'button' && node.attribs.role !== 'tab');
 
-function textContent(node: DOMNode): string {
-  if (node.type === 'text') return node.data;
-  if (node instanceof Element) return (node.children as DOMNode[]).map(textContent).join('');
-  return '';
-}
-
-const commands = commandParagraphs.map((node, index) => {
-  const mission = textContent(node).match(/Use Wikshi to (.*?)\. Pay via/)?.[1];
-  return wikshiPrompt(index === 0 || !mission ? undefined : `Use Wikshi to ${mission}.`);
-});
+// Agent selection is compatibility context, not a different user mission.
+const commands = commandParagraphs.map(() => wikshiPrompt());
 
 export function Hero() {
   const [activeTab, setActiveTab] = useState(0);
