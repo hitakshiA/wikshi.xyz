@@ -20,5 +20,5 @@ if [ ! -f /etc/nginx/sites-available/wikshi-web ]; then
 fi
 nginx -t
 systemctl reload nginx
-curl --fail --silent -H 'Host: wikshi.xyz' http://127.0.0.1/docs >/dev/null
+curl --fail --silent --retry 5 --retry-all-errors --retry-delay 1 -H 'Host: wikshi.xyz' http://127.0.0.1/docs >/dev/null
 systemctl is-active wikshi-api
