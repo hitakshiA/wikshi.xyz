@@ -1,0 +1,13 @@
+.git
+.agents
+.azure
+.env*
+/docs
+/exa-results
+/planning-artifacts
+/videos
+node_modules
+.next
+*.tsbuildinfo
+*.pem
+*.key

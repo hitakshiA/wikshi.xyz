@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env*
+!.env.example
+*.tsbuildinfo
+.vercel/
+.DS_Store
+.azure/
+*.pem
+*.key
+.vercel
+.env*.local
