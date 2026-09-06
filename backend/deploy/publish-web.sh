@@ -18,6 +18,7 @@ if [ ! -f /etc/nginx/sites-available/wikshi-web ]; then
   install -m 644 backend/deploy/wikshi-web.nginx /etc/nginx/sites-available/wikshi-web
   ln -s /etc/nginx/sites-available/wikshi-web /etc/nginx/sites-enabled/wikshi-web
 fi
+install -m 644 backend/deploy/wikshi-markdown.nginx /etc/nginx/conf.d/wikshi-markdown.conf
 nginx -t
 systemctl reload nginx
 curl --fail --silent --retry 5 --retry-all-errors --retry-delay 1 -H 'Host: wikshi.xyz' http://127.0.0.1/docs >/dev/null
