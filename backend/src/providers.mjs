@@ -90,7 +90,7 @@ export class Providers {
     }
     if(service==='video.meeting') {
       const agent=await this.bey('/agents','POST',{name:'Wikshi',avatar_id:this.env.BEY_AVATAR_ID,language:'en',max_session_length_minutes:input.maxSeconds/60,
-        greeting:`I'm Wikshi, an AI assistant. This conversation is transcribed for your agent. May we continue? ${input.questions[0]}`,
+        greeting:`I'm Wikshi, an AI representative for the person or team who invited you. They'll receive a transcript. May we continue? ${input.questions[0]}`,
         system_prompt:`Conduct a focused conversation comfortably within ${input.maxSeconds} seconds. Identify as AI and obtain consent. No big introduction or rigid questionnaire. Ask related questions together, adapt to answers, respect refusals, and summarize only confirmed facts. Never promise external actions or commitments. Mission: ${input.mission}\nEssential questions: ${input.questions.join(' / ')}`});
       if(!agent.id)throw new ProviderError(true);
       return {done:false,waiting:true,private:{agentId:agent.id}};
