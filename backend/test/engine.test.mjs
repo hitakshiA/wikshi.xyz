@@ -23,6 +23,20 @@ function setup(options={}){
   return {engine,store,blocky,env,providers,counts:()=>({settles,dispatches})};
 }
 const quote=e=>e.quote('network.inspect',{account:'0.0.7284970'},credential,randomBytes(16).toString('hex'));
+test('only confirmed payer payments grant a durable inbox; recovery backfills historical payers',async()=>{
+  let confirmed=false;const {engine,store,env}=setup({confirm:async()=>confirmed});
+  Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture'});
+  engine.providers=new Providers(env);
+  const op=await quote(engine);await engine.pay(op.id,credential,{});
+  assert.equal(store.inboxes(hash(credential)).length,0);
+  confirmed=true;await engine.reconcilePayment(store.get(op.id));
+  const inbox=store.inboxes(hash(credential))[0];assert.ok(inbox.address);
+  assert.equal(engine.view(store.get(op.id)).inbox.id,inbox.id);
+  const other=await quote(engine);other.data.payment={confirmed:true,payer:'0.0.999',tx:'historical'};other.auth='new-authorized-credential-hash';other.state='completed';
+  store.db.prepare('UPDATE operations SET auth=? WHERE id=?').run(other.auth,other.id);store.save(other);
+  engine.recover();assert.equal(store.inboxes(other.auth)[0].id,inbox.id);
+  assert.equal(store.resource(inbox.id,'stranger'),null);
+});
 test('quote idempotency returns same operation and rejects changed inputs',async()=>{
   const {engine}=setup(),key='unique-request-00001';
   const a=await engine.quote('network.inspect',{account:'0.0.123'},credential,key),b=await engine.quote('network.inspect',{account:'0.0.123'},credential,key);

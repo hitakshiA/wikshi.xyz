@@ -1,6 +1,6 @@
 import {randomUUID,randomBytes,createPrivateKey,createPublicKey,sign,createHmac} from 'node:crypto';
 import {hash} from './store.mjs';
-import {ApiError,catalog,validate} from './catalog.mjs';
+import {ApiError,catalog,validate,emailAddress} from './catalog.mjs';
 import {Blocky,NETWORK,USDC} from './payments/blocky.mjs';
 import {inspectPayment,confirmTransfer} from './payments/hedera.mjs';
 
@@ -20,7 +20,7 @@ export class Engine {
   view(op) {
     const data=op.data;
     return {id:op.id,service:data.service,status:op.state,createdAt:new Date(op.created).toISOString(),expiresAt:new Date(data.expires).toISOString(),
-      result:data.result,receipt:data.receipt,refund:data.refund?{status:data.refund.status,amountAtomic:data.refund.amount,transaction:data.refund.status==='confirmed'?data.refund.tx:undefined}:undefined,
+      result:data.result,inbox:data.inbox,receipt:data.receipt,refund:data.refund?{status:data.refund.status,amountAtomic:data.refund.amount,transaction:data.refund.status==='confirmed'?data.refund.tx:undefined}:undefined,
       error:data.error?{code:data.error}:undefined};
   }
   challenge(op) {return {x402Version:2,resource:{url:`${this.env.WIKSHI_PUBLIC_ORIGIN}/v1/operations/${op.id}/pay`,description:'Wikshi service operation',mimeType:'application/json'},accepts:[op.data.requirements],extensions:{wikshi:{transactionMemo:`wikshi:${op.id}`,operationId:op.id}}};}
@@ -31,9 +31,18 @@ export class Engine {
     if(prior){if(prior.request_hash!==requestHash)throw new ApiError('idempotency_conflict',409);return prior;}
     const entry=this.services().find(s=>s.id===service && s.enabled);
     if(!entry)throw new ApiError('service_unavailable',503);
-    if(['email.send','phone.call'].includes(service)) {
+    let recipient=input.to||input.phone;
+    if(service==='email.inbox' && this.store.inboxes(auth).length)throw new ApiError('inbox_already_available_use_get_inboxes',409);
+    if(service==='email.reply'){
+      if(!this.store.resource(input.inboxId,auth))throw new ApiError('inbox_not_found',404);
+      const message=this.store.message(input.inboxId,input.messageId);
+      if(!message || message.direction!=='inbound')throw new ApiError('message_not_found',404);
+      recipient=message.replyTo||message.from;
+      if(!emailAddress(recipient) || /[\r\n]/.test(message.subject||''))throw new ApiError('invalid_reply_target');
+    }
+    if(['email.send','email.reply','phone.call'].includes(service)) {
       const allow=(this.env.WIKSHI_TESTNET_RECIPIENTS||'').split(',').map(x=>x.trim().toLowerCase());
-      if(!allow.includes((input.to||input.phone).toLowerCase()))throw new ApiError('recipient_not_approved_for_testnet',403);
+      if(!allow.includes(recipient.toLowerCase()))throw new ApiError('recipient_not_approved_for_testnet',403);
     }
     if(service==='email.send' && !this.store.resource(input.inboxId,auth))throw new ApiError('inbox_not_found',404);
     const amount=(BigInt(entry.rateAtomic)*BigInt(entry.unit==='second'?input.maxSeconds:1)).toString();
@@ -76,9 +85,15 @@ export class Engine {
   async reconcilePayment(op) {
     try {
       if(await this.confirm(op.data.payment.tx,{payer:op.data.payment.payer,payTo:op.data.requirements.payTo,amount:op.data.requirements.amount})) {
-        op.state='queued';op.data.payment.confirmed=true;delete op.data.payment.payload;this.store.save(op);
+        // Grants follow a freshly verified payment signature, never a public transaction ID.
+        this.store.atomic(()=>{this.store.bindPayer(op.auth,op.data.payment.payer);op.state='queued';op.data.payment.confirmed=true;delete op.data.payment.payload;this.store.save(op);});
+        this.attachInbox(op);
       }
     } catch {/* Mirror lag or outage is not payment failure. */}
+  }
+  attachInbox(op) {
+    const inbox=this.providers.provisionInbox?.(op.data.payment.payer,op.auth,this.store,op.data.input.displayName);
+    if(inbox && op.data.inbox?.id!==inbox.id){op.data.inbox={id:inbox.id,address:inbox.address};this.store.save(op);}
   }
   finish(op,result,seconds=undefined) {
     if(seconds!==undefined && (!Number.isFinite(seconds) || seconds<0))throw new Error('Invalid measured duration');
@@ -106,6 +121,7 @@ export class Engine {
     });
     if(!claimed)return;
     try {
+      this.attachInbox(op);
       const output=await this.providers.execute(op,this.store);
       if(output.resource){this.store.atomic(()=>{this.store.putResource(output.resource.id,op.auth,output.resource);op.data.resourceId=output.resource.id;this.store.save(op);});output.result.inboxId=output.resource.id;}
       if(output.done)this.finish(op,output.result);
@@ -158,8 +174,14 @@ export class Engine {
     }
   }
   recover() {
-    for(const op of this.store.list(['dispatching','joining','settling_payment','verifying_payment'])) {
-      op.state=['dispatching','joining'].includes(op.state)?'execution_unknown':'confirming_payment';this.store.save(op);
+    let pending;
+    while((pending=this.store.list(['dispatching','joining','settling_payment','verifying_payment'])).length){
+      for(const op of pending){op.state=['dispatching','joining'].includes(op.state)?'execution_unknown':'confirming_payment';this.store.save(op);}
+    }
+    // Upgrade previously confirmed testnet payers without asking them to pay twice.
+    for(const row of this.store.db.prepare('SELECT id FROM operations').all()){
+      const op=this.store.get(row.id);
+      if(op.data.payment?.confirmed){this.store.bindPayer(op.auth,op.data.payment.payer);this.attachInbox(op);}
     }
   }
   async tick() {

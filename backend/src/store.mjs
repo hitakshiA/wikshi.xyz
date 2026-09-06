@@ -14,6 +14,11 @@ export class Store {
       CREATE TABLE IF NOT EXISTS payments (tx TEXT PRIMARY KEY, operation TEXT NOT NULL UNIQUE);
       CREATE TABLE IF NOT EXISTS guests (hash TEXT PRIMARY KEY, operation TEXT NOT NULL UNIQUE, used INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, auth TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS resource_grants (resource TEXT NOT NULL, auth TEXT NOT NULL, PRIMARY KEY(resource,auth));
+      CREATE TABLE IF NOT EXISTS payer_inboxes (payer TEXT PRIMARY KEY, resource TEXT NOT NULL UNIQUE, address_hash TEXT NOT NULL UNIQUE);
+      CREATE TABLE IF NOT EXISTS verified_payers (auth TEXT NOT NULL, payer TEXT NOT NULL, PRIMARY KEY(auth,payer));
+      CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, inbox TEXT NOT NULL, source TEXT NOT NULL, created INTEGER NOT NULL, data TEXT NOT NULL, UNIQUE(inbox,source));
+      CREATE TABLE IF NOT EXISTS mail_events (id TEXT PRIMARY KEY, received INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, operation TEXT NOT NULL, state TEXT NOT NULL, at INTEGER NOT NULL);
     `);
   }
@@ -41,7 +46,36 @@ export class Store {
   }
   event(id,state) {this.db.prepare('INSERT INTO events(operation,state,at) VALUES(?,?,?)').run(id,state,Date.now());}
   list(states) {return this.db.prepare(`SELECT id FROM operations WHERE state IN (${states.map(()=>'?').join(',')}) ORDER BY updated LIMIT 30`).all(...states).map(row=>this.get(row.id));}
-  resource(id, auth) {const row=this.db.prepare('SELECT data FROM resources WHERE id=? AND auth=?').get(id,auth);return row ? this.open(row.data,id) : null;}
+  resource(id, auth) {const row=this.db.prepare('SELECT data FROM resources WHERE id=? AND (auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?))').get(id,auth,auth);return row ? this.open(row.data,id) : null;}
   putResource(id, auth, data) {this.db.prepare('INSERT INTO resources VALUES(?,?,?)').run(id,auth,this.seal(data,id));}
+  bindPayer(auth,payer) {
+    this.db.prepare('INSERT OR IGNORE INTO verified_payers VALUES(?,?)').run(auth,payer);
+    const inbox=this.db.prepare('SELECT resource FROM payer_inboxes WHERE payer=?').get(payer);
+    if(inbox)this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.resource,auth);
+  }
+  payerInbox(payer) {
+    const row=this.db.prepare('SELECT r.id,r.data FROM resources r JOIN payer_inboxes p ON p.resource=r.id WHERE p.payer=?').get(payer);
+    return row?this.open(row.data,row.id):null;
+  }
+  createPayerInbox(payer,auth,resource) {
+    return this.atomic(()=>{
+      let inbox=this.payerInbox(payer);
+      if(!inbox){this.putResource(resource.id,auth,resource);this.db.prepare('INSERT INTO payer_inboxes VALUES(?,?,?)').run(payer,resource.id,hash(resource.address.toLowerCase()));inbox=resource;}
+      this.db.prepare('INSERT OR IGNORE INTO resource_grants(resource,auth) SELECT ?,auth FROM verified_payers WHERE payer=?').run(inbox.id,payer);
+      this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.id,auth);
+      return inbox;
+    });
+  }
+  inboxForAddress(address) {
+    const row=this.db.prepare('SELECT r.id,r.data FROM resources r JOIN payer_inboxes p ON p.resource=r.id WHERE p.address_hash=?').get(hash(address.toLowerCase()));
+    return row?this.open(row.data,row.id):null;
+  }
+  inboxes(auth) {return this.db.prepare("SELECT id,data FROM resources WHERE auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?)").all(auth,auth).map(r=>this.open(r.data,r.id)).filter(r=>r.kind==='inbox').map(r=>({id:r.id,address:r.address,displayName:r.displayName}));}
+  putMessage(inbox,source,data) {
+    const id=hash(`${inbox}:${source}`).slice(0,32).replace(/^(........)(....)(....)(....)(............)$/,'$1-$2-$3-$4-$5');
+    this.db.prepare('INSERT OR IGNORE INTO messages VALUES(?,?,?,?,?)').run(id,inbox,source,Date.now(),this.seal({...data,id},id));return id;
+  }
+  messages(inbox,before=Number.MAX_SAFE_INTEGER) {return this.db.prepare('SELECT id,data,rowid AS cursor FROM messages WHERE inbox=? AND rowid<? ORDER BY rowid DESC LIMIT 20').all(inbox,before).map(r=>({...this.open(r.data,r.id),cursor:r.cursor}));}
+  message(inbox,id) {const r=this.db.prepare('SELECT data FROM messages WHERE inbox=? AND id=?').get(inbox,id);return r?this.open(r.data,id):null;}
   close() {this.db.close();}
 }

@@ -16,7 +16,15 @@ export class Providers {
     } catch(error) {if(error instanceof ProviderError)throw error;throw new ProviderError(method!=='GET');}
   }
   bey(path, method='GET', body) {return this.request(`https://api.bey.dev/v1${path}`,{method,body,headers:{'x-api-key':this.env.BEY_API_KEY}});}
-  mail(path,method='GET',body) {return this.request(`https://api.agentmail.to/v0${path}`,{method,body,headers:{Authorization:`Bearer ${this.env.AGENTMAIL_API_KEY}`}});}
+  mail(path,method='GET',body,idempotencyKey) {return this.request(`https://api.resend.com${path}`,{method,body,headers:{Authorization:`Bearer ${this.env.RESEND_API_KEY}`,...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})}});}
+  phone(path,method='GET',body) {return this.request(`https://api.agentphone.ai/v1${path}`,{method,body,headers:{Authorization:`Bearer ${this.env.AGENTPHONE_API_KEY}`}});}
+  provisionInbox(payer,auth,store,displayName='Wikshi agent') {
+    const existing=store.payerInbox(payer);if(existing)return store.createPayerInbox(payer,auth,existing);
+    const domain=this.env.WIKSHI_EMAIL_DOMAIN;
+    if(this.env.WIKSHI_EMAIL_READY!=='true' || !this.env.RESEND_API_KEY || !this.env.RESEND_WEBHOOK_SECRET || !/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i.test(domain||''))return null;
+    const id=randomUUID();
+    return store.createPayerInbox(payer,auth,{id,kind:'inbox',displayName,address:`agent-${id.replaceAll('-','')}@${domain.toLowerCase()}`,createdAt:new Date().toISOString()});
+  }
   async execute(op,store) {
     const {service,input}=op.data;
     if(service==='network.inspect') {
@@ -25,33 +33,52 @@ export class Providers {
       const token=tokens.tokens.find(t=>t.token_id===USDC);
       return {done:true,result:{account:input.account,network:'hedera:testnet',hbarTinybars:String(account.balance.balance),usdcAtomicBalance:String(token?.balance??0),usdcAssociated:Boolean(token),usdcFrozen:token?.freeze_status==='FROZEN',observedAt:new Date().toISOString()}};
     }
-    if(service==='discovery.search') {
-      const data=await this.request('https://api.exa.ai/search',{method:'POST',headers:{'x-api-key':this.env.EXA_API_KEY},body:{query:input.query,numResults:input.limit,type:'auto',contents:{text:{maxCharacters:3000}}}});
+    if(service.startsWith('discovery.')) {
+      const contents=service==='discovery.contents';
+      const category={'discovery.people':'people','discovery.companies':'company'}[service];
+      const body=contents?{ids:input.urls,text:{maxCharacters:10000}}:{query:input.query,numResults:input.limit,type:'auto',...(category?{category}:{}),contents:{text:{maxCharacters:3000}}};
+      const data=await this.request(`https://api.exa.ai/${contents?'contents':'search'}`,{method:'POST',headers:{'x-api-key':this.env.EXA_API_KEY},body});
       if(!Array.isArray(data.results))throw new ProviderError(true);
       return {done:true,result:{results:data.results.map(r=>({title:r.title,url:r.url,text:r.text,publishedAt:r.publishedDate})),contentTrust:'untrusted-source-content'}};
     }
-    if(service==='contacts.enrich') {
-      // Key remains in an Authorization header, never a URL or client response.
-      const query=new URLSearchParams({domain:input.domain,first_name:input.firstName,last_name:input.lastName});
-      const data=await this.request(`https://api.hunter.io/v2/email-finder?${query}`,{headers:{Authorization:`Bearer ${this.env.HUNTER_API_KEY}`}});
-      return {done:true,result:{email:data.data?.email??null,confidence:data.data?.score??null,sources:(data.data?.sources||[]).map(s=>({url:s.uri}))}};
+    if(service.startsWith('contacts.')) {
+      const paths={'contacts.enrich':'search','contacts.phone':'phone-search','contacts.reverse':'email-search','contacts.company':'dataset-search'};
+      const params={first_name:input.firstName,last_name:input.lastName,company_url:input.domain,linkedin_url:input.linkedinUrl,email:input.email,title:input.title,page:input.page};
+      const query=new URLSearchParams(Object.entries(params).filter(([,v])=>v!==undefined));
+      const data=await this.request(`https://app.quickenrich.io/api/employees/${paths[service]}?${query}`,{headers:{Authorization:`Bearer ${this.env.QUICKENRICH_API_KEY}`}});
+      if(data.success!==true || !data.data || typeof data.data!=='object')throw new ProviderError();
+      const fields={first_name:'firstName',last_name:'lastName',title:'title',email:'email',employee_phone:'phone',employee_phone_type:'phoneType',employee_linkedin:'profileUrl',email_verification_date:'emailVerifiedAt',company_url:'companyUrl',company_name:'companyName',company_phone:'companyPhone',industry:'industry',employee_count:'employeeCount',city:'city',region_code:'region',country_code:'country'};
+      const rows=(Array.isArray(data.data)?data.data:[data.data]).slice(0,20).map(r=>Object.fromEntries(Object.entries(fields).map(([key,label])=>[label,r[key]==='N/A'?null:r[key]??null])));
+      return {done:true,result:{contacts:rows,found:rows.length>0,page:input.page,hasMore:Number(data.meta?.last_page)>Number(input.page),contentTrust:'untrusted-source-content'}};
     }
     if(service==='email.inbox') {
-      const data=await this.mail('/inboxes','POST',{display_name:input.displayName,domain:this.env.WIKSHI_EMAIL_DOMAIN,client_id:op.id});
-      if(!data.inbox_id || !data.email || !data.email.endsWith(`@${this.env.WIKSHI_EMAIL_DOMAIN}`))throw new ProviderError(true);
-      return {done:true,resource:{id:randomUUID(),providerId:data.inbox_id,address:data.email},result:{address:data.email}};
+      const inbox=this.provisionInbox(op.data.payment.payer,op.auth,store,input.displayName);
+      if(!inbox)throw new ProviderError();
+      return {done:true,result:{inboxId:inbox.id,address:inbox.address}};
     }
-    if(service==='email.send') {
+    if(['email.send','email.reply'].includes(service)) {
       const inbox=store.resource(input.inboxId,op.auth);
       if(!inbox)throw new ProviderError();
-      const data=await this.mail(`/inboxes/${encodeURIComponent(inbox.providerId)}/messages/send`,'POST',{to:[input.to],subject:input.subject,text:input.text});
-      if(!data.message_id)throw new ProviderError(true);
-      return {done:true,result:{messageId:op.id,status:'sent'}};
+      if(inbox.kind!=='inbox')throw new ProviderError();
+      const message=service==='email.reply'?store.message(input.inboxId,input.messageId):null;
+      if(service==='email.reply' && (!message || message.direction!=='inbound'))throw new ProviderError();
+      const to=message?.replyTo||message?.from||input.to;
+      const subject=message?`Re: ${message.subject}`.slice(0,200):input.subject;
+      const headers=message?.rfcMessageId?{'In-Reply-To':message.rfcMessageId,References:message.rfcMessageId}:undefined;
+      const data=await this.mail('/emails','POST',{from:inbox.address,to:[to],subject,text:input.text,reply_to:inbox.address,...(headers?{headers}:{})},op.id);
+      if(!data.id)throw new ProviderError(true);
+      const messageId=store.putMessage(inbox.id,`outbound:${op.id}`,{direction:'outbound',from:inbox.address,to:[to],subject,text:input.text,status:'accepted',createdAt:new Date().toISOString()});
+      return {done:true,result:{messageId,status:'accepted'}};
     }
     if(service==='phone.call') {
-      const data=await this.request('https://api.bland.ai/v1/calls',{method:'POST',headers:{Authorization:this.env.BLAND_API_KEY},body:{phone_number:input.phone,task:`You are an AI assistant calling on the user's behalf. Briefly identify yourself as AI, ask permission to continue, respect refusals, and get directly to the task. Do not make purchases or commitments. Mission: ${input.mission}`,max_duration:input.maxSeconds/60,record:false,voicemail_action:'hangup',metadata:{wikshi_operation:op.id}}});
-      if(!data.call_id)throw new ProviderError(true);
-      return {done:false,private:{callId:data.call_id}};
+      // Adapter is intentionally disabled in the sellable catalog until hard-cap validation.
+      const agent=await this.phone(`/agents/${encodeURIComponent(this.env.AGENTPHONE_AGENT_ID)}`);
+      if(agent.enableMessaging!==false)throw new ProviderError();
+      const data=await this.phone('/calls','POST',{agentId:this.env.AGENTPHONE_AGENT_ID,toNumber:input.phone,disableRecording:true,
+        initialGreeting:"I'm Wikshi, an AI assistant. This call is transcribed for your agent. May we continue?",
+        systemPrompt:`Finish within ${input.maxSeconds} seconds. Ask related questions together, be concise, identify as AI, respect refusals. Do not send messages, transfer calls, make purchases or commitments. Mission: ${input.mission}`});
+      if(!data.id)throw new ProviderError(true);
+      return {done:false,private:{callId:data.id,deadline:Date.now()+input.maxSeconds*1000}};
     }
     if(service==='video.meeting') {
       const agent=await this.bey('/agents','POST',{name:'Wikshi',avatar_id:this.env.BEY_AVATAR_ID,language:'en',max_session_length_minutes:input.maxSeconds/60,
@@ -78,16 +105,15 @@ export class Providers {
       if(!Number.isFinite(seconds) || seconds<0)throw new ProviderError();
       return {seconds,transcript};
     }
-    const data=await this.request(`https://api.bland.ai/v1/calls/${encodeURIComponent(op.data.private.callId)}`,{headers:{Authorization:this.env.BLAND_API_KEY}});
-    if(data.completed!==true)return null;
-    const seconds=Number(data.corrected_duration);
-    if(data.corrected_duration==null || !Number.isFinite(seconds) || seconds<0 || !Array.isArray(data.transcripts))throw new ProviderError();
+    const id=encodeURIComponent(op.data.private.callId);
+    const data=await this.phone(`/calls/${id}`);
+    if(!['completed','failed'].includes(data.status)){
+      if(Date.now()>=op.data.private.deadline)await this.phone(`/calls/${id}/end`,'POST',{});
+      return null;
+    }
+    const seconds=data.durationSeconds;
+    if(typeof seconds!=='number' || !Number.isFinite(seconds) || seconds<0 || !Array.isArray(data.transcripts))throw new ProviderError();
     return {seconds,transcript:data.transcripts};
   }
   async cleanup(op) {if(op.data.service==='video.meeting' && op.data.private?.agentId)await this.bey(`/agents/${encodeURIComponent(op.data.private.agentId)}`,'DELETE');}
-  async inboxMessages(resource) {
-    const data=await this.mail(`/inboxes/${encodeURIComponent(resource.providerId)}/messages?limit=20`);
-    if(!Array.isArray(data.messages))throw new ProviderError();
-    return {messages:data.messages.map(m=>({from:m.from,to:m.to,subject:m.subject,text:m.text,receivedAt:m.timestamp})),contentTrust:'untrusted-message-content'};
-  }
 }

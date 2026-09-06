@@ -8,19 +8,21 @@ import {Engine} from './engine.mjs';
 import {Providers} from './providers.mjs';
 import {ApiError} from './catalog.mjs';
 import {RefundSigner} from './payments/hedera.mjs';
+import {receiveEmail} from './inbound.mjs';
 
 function credential(req) {
   const token=req.headers.authorization?.replace(/^Bearer /,'');
   if(!/^[A-Za-z0-9_-]{43,128}$/.test(token||''))throw new ApiError('private_credential_required',401);
   return token;
 }
-async function body(req) {
+async function rawBody(req) {
   if(!req.headers['content-type']?.startsWith('application/json'))throw new ApiError('json_required',415);
   if(req.headers['content-encoding'])throw new ApiError('unsupported_encoding',415);
   let length=0;const parts=[];
   for await(const part of req){length+=part.length;if(length>65536)throw new ApiError('request_too_large',413);parts.push(part);}
-  try{return JSON.parse(Buffer.concat(parts).toString());}catch{throw new ApiError('invalid_json');}
+  return Buffer.concat(parts);
 }
+async function body(req) {try{return JSON.parse((await rawBody(req)).toString());}catch(error){if(error instanceof ApiError)throw error;throw new ApiError('invalid_json');}}
 export function createApi(engine) {
   const limits=new Map();
   const server=createServer({maxHeaderSize:65536,requestTimeout:15000,headersTimeout:10000},async (req, res) => {
@@ -43,6 +45,7 @@ export function createApi(engine) {
       return send(200,{network:'hedera:testnet',services:engine?.services()||[],status:engine?'configured':'configuration_required'});
     }
     if(!engine)throw new ApiError('not_found',404);
+    if(req.method==='POST' && req.url==='/v1/webhooks/email')return send(200,await receiveEmail(engine,await rawBody(req),req.headers));
     if(req.method==='GET' && req.url==='/v1/docs'){res.setHeader('Content-Type','text/plain; charset=utf-8');res.end(readFileSync(new URL('../docs/api.md',import.meta.url)));return;}
     if(req.method==='GET' && req.url==='/v1/receipt-key')return send(200,engine.receiptKey);
     const files={
@@ -61,6 +64,7 @@ export function createApi(engine) {
       return send(200,await engine.join(data.guestToken));
     }
     const token=credential(req);
+    if(req.method==='GET' && req.url==='/v1/inboxes')return send(200,{inboxes:engine.store.inboxes(hash(token))});
     if(req.method==='POST' && req.url==='/v1/operations'){
       const data=await body(req);let op=await engine.quote(data.service,data.input,token,req.headers['idempotency-key']);
       if(req.headers['payment-signature']){
@@ -87,8 +91,16 @@ export function createApi(engine) {
         return send(op.state==='payment_rejected'?402:202,engine.view(op));
       }
     }
-    const inbox=/^\/v1\/inboxes\/([a-f0-9-]{36})\/messages$/.exec(req.url||'');
-    if(req.method==='GET' && inbox){const resource=engine.store.resource(inbox[1],hash(token));if(!resource)throw new ApiError('not_found',404);return send(200,await engine.providers.inboxMessages(resource));}
+    const parsed=new URL(req.url,'http://localhost');
+    const inbox=/^\/v1\/inboxes\/([a-f0-9-]{36})\/messages(?:\/([a-f0-9-]{36}))?$/.exec(parsed.pathname);
+    if(req.method==='GET' && inbox){
+      const resource=engine.store.resource(inbox[1],hash(token));if(!resource || resource.kind!=='inbox')throw new ApiError('not_found',404);
+      if(inbox[2]){const message=engine.store.message(inbox[1],inbox[2]);if(!message)throw new ApiError('not_found',404);return send(200,{message,contentTrust:'untrusted-message-content'});}
+      const before=parsed.searchParams.has('before')?Number(parsed.searchParams.get('before')):Number.MAX_SAFE_INTEGER;
+      if(!Number.isSafeInteger(before) || before<1)throw new ApiError('invalid_cursor');
+      const messages=engine.store.messages(inbox[1],before);
+      return send(200,{messages,nextCursor:messages.length===20?messages.at(-1).cursor:null,contentTrust:'untrusted-message-content'});
+    }
     throw new ApiError('not_found',404);
     } catch(error) {
       // Neither stack traces, upstream URLs, credentials nor provider error text cross this boundary.
