@@ -60,6 +60,8 @@ export class Engine {
     if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);
     this.blocky.envelope(payload,op.data.requirements);
     const payment=this.inspect(payload,op.data.requirements,op.id);
+    const approved=(this.env.WIKSHI_TESTNET_PAYERS||'').split(',').map(x=>x.trim()).filter(Boolean);
+    if(approved.length && !approved.includes(payment.payer))throw new ApiError('payer_not_approved_for_testnet',403);
     const claimed=this.store.atomic(()=>{
       op=this.store.get(id);if(op.state!=='awaiting_payment')return false;
       if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);

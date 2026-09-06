@@ -23,6 +23,11 @@ function setup(options={}){
   return {engine,store,blocky,env,providers,counts:()=>({settles,dispatches})};
 }
 const quote=e=>e.quote('network.inspect',{account:'0.0.7284970'},credential,randomBytes(16).toString('hex'));
+test('testnet payer allowlist rejects unrelated wallets before settlement',async()=>{
+  const {engine,env,counts}=setup();env.WIKSHI_TESTNET_PAYERS='0.0.7284970';const op=await quote(engine);
+  await assert.rejects(engine.pay(op.id,credential,{}),/payer_not_approved_for_testnet/);
+  assert.equal(counts().settles,0);
+});
 test('only confirmed payer payments grant a durable inbox; recovery backfills historical payers',async()=>{
   let confirmed=false;const {engine,store,env}=setup({confirm:async()=>confirmed});
   Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture'});
