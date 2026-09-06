@@ -53,8 +53,10 @@ main>section:first-child .wikshi-hero-subtitle{max-width:525px;font-size:17px;li
 #quickstart-panel{scroll-margin-top:125px}
 main [role=tab] img{object-fit:contain}
 main [role=tab]:first-child img{width:24px;height:24px;transform:scale(1.3)}
-.courier-sky{position:absolute;inset:0;overflow:hidden;pointer-events:none;contain:paint}
-.courier-scene{position:absolute;bottom:-18px;left:50%;width:max(100%,1100px);height:600px;max-width:none;transform:translateX(-50%)}
+.courier-sky{position:absolute;inset:0;overflow:hidden;pointer-events:none;contain:paint;-webkit-mask-image:linear-gradient(to right,transparent,#000 7%,#000 93%,transparent);mask-image:linear-gradient(to right,transparent,#000 7%,#000 93%,transparent)}
+/* Fade at the SVG's own crop as well as the viewport edges. This also covers
+   the top crop introduced by preserveAspectRatio on wide screens. */
+.courier-scene{position:absolute;bottom:-18px;left:50%;width:max(100%,1100px);height:600px;max-width:none;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 16%,#000 82%,transparent 98%);mask-image:linear-gradient(to bottom,transparent,#000 16%,#000 82%,transparent 98%)}
 .courier-packet{offset-distance:0;offset-rotate:auto;animation:courier-delivery var(--journey) linear infinite;animation-delay:var(--delay);opacity:.82}
 .courier-orbit{animation:courier-hover 9s ease-in-out infinite alternate}
 .courier-orbit.orbit-late{animation-delay:-6s;animation-duration:12s}
@@ -63,7 +65,8 @@ main [role=tab]:first-child img{width:24px;height:24px;transform:scale(1.3)}
 .sky-motion-toggle{position:absolute;bottom:20px;right:25px;z-index:3;display:flex;align-items:center;gap:7px;background:#425f47;border:1px solid #819778;border-radius:20px;color:#e1e8d7;padding:5px 10px;font-size:11px;cursor:pointer}
 .sky-motion-toggle span{font-size:9px;letter-spacing:.03em}
 .courier-sky[data-paused=true] *{animation-play-state:paused!important}
-@keyframes courier-delivery{from{offset-distance:0%}to{offset-distance:100%}}
+/* Invisible at the loop seam; the envelope never teleports at full opacity. */
+@keyframes courier-delivery{0%{offset-distance:0%;opacity:0}8%{opacity:.82}90%{opacity:.82}100%{offset-distance:100%;opacity:0}}
 @keyframes courier-hover{from{transform:translateY(0) rotate(-2deg)}to{transform:translateY(-13px) rotate(2deg)}}
 @keyframes courier-twinkle{from{opacity:.25}to{opacity:.9}}
 @keyframes courier-ring{0%,70%,100%{opacity:.35}25%,45%{opacity:1}}
