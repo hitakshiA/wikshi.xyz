@@ -6,6 +6,7 @@
 /exa-results
 /planning-artifacts
 /videos
+/backend
 node_modules
 .next
 *.tsbuildinfo
