@@ -75,6 +75,20 @@ test('worker restart does not repeat provider dispatch or join',async()=>{
   const {engine,store,counts}=setup();const op=await quote(engine);op.state='dispatching';store.save(op);engine.recover();await engine.tick();
   assert.equal(store.get(op.id).state,'execution_unknown');assert.equal(counts().dispatches,0);
 });
+test('stale queued snapshot cannot dispatch a cancelled and refunded operation',async()=>{
+  const {engine,store,counts}=setup();const op=await quote(engine);await engine.pay(op.id,credential,{});
+  const stale=store.get(op.id);await engine.cancel(op.id,credential);await engine.dispatch(stale);
+  assert.equal(counts().dispatches,0);assert.equal(store.get(op.id).state,'failed');assert.equal(store.get(op.id).data.refund.amount,'10');
+});
+test('completed video waits for stable transcript before storing original and cleaning up',async()=>{
+  const {engine,store,providers}=setup();const op=await quote(engine);
+  op.state='running';op.data.service='video.meeting';op.data.input.maxSeconds=180;op.data.private={agentId:'private'};op.data.payment={confirmed:true,tx:'paid',payer:'0.0.999'};
+  op.data.price={unit:'second',rateAtomic:'1'};op.data.requirements.amount='180';store.save(op);
+  let cleanup=0;providers.cleanup=async()=>{cleanup++;};providers.poll=async()=>({seconds:10,transcript:[{sender:'user',message:'Um, keep my exact words.',sent_at:'now'}]});
+  await engine.tick();assert.equal(store.get(op.id).state,'running');assert.equal(cleanup,0);
+  const candidate=store.get(op.id);candidate.data.transcriptObservedAt=Date.now()-11000;store.save(candidate);await engine.tick();
+  assert.equal(store.get(op.id).state,'completed');assert.equal(cleanup,1);assert.equal(store.get(op.id).data.result.transcript[0].message,'Um, keep my exact words.');
+});
 test('meeting invitation admits once, including concurrent joins',async()=>{
   const {engine,store,providers}=setup();const op=await quote(engine),guest=randomBytes(32).toString('base64url');
   op.state='awaiting_guest';op.data.private={agentId:'never-public'};op.data.guestExpires=Date.now()+100000;store.save(op);

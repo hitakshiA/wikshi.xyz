@@ -53,6 +53,7 @@ export class Engine {
     const payment=this.inspect(payload,op.data.requirements,op.id);
     const claimed=this.store.atomic(()=>{
       op=this.store.get(id);if(op.state!=='awaiting_payment')return false;
+      if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);
       if(this.store.db.prepare('SELECT tx FROM payments WHERE tx=?').get(payment.tx))throw new ApiError('payment_replayed',409);
       this.store.db.prepare('INSERT INTO payments VALUES(?,?)').run(payment.tx,id);
       op.state='verifying_payment';op.data.payment={...payment,payload};this.store.save(op);return true;
@@ -97,8 +98,13 @@ export class Engine {
     op.state='failed';op.data.error=code;op.data.refund={amount:op.data.requirements.amount,status:'pending'};this.store.save(op);
   }
   async dispatch(op) {
-    if(!op.data.payment?.confirmed)throw new Error('Cannot dispatch unpaid operation');
-    op.state='dispatching';this.store.save(op);
+    const claimed=this.store.atomic(()=>{
+      op=this.store.get(op.id);
+      if(op.state!=='queued')return false;
+      if(!op.data.payment?.confirmed)throw new Error('Cannot dispatch unpaid operation');
+      op.state='dispatching';this.store.save(op);return true;
+    });
+    if(!claimed)return;
     try {
       const output=await this.providers.execute(op,this.store);
       if(output.resource){this.store.atomic(()=>{this.store.putResource(output.resource.id,op.auth,output.resource);op.data.resourceId=output.resource.id;this.store.save(op);});output.result.inboxId=output.resource.id;}
@@ -159,7 +165,8 @@ export class Engine {
   async tick() {
     if(this.busy)return;this.busy=true;
     try {
-      for(const op of ['confirming_payment','queued','running','awaiting_guest','awaiting_payment'].flatMap(state=>this.store.list([state]))) {
+      for(const candidate of ['confirming_payment','queued','running','awaiting_guest','awaiting_payment'].flatMap(state=>this.store.list([state]))) {
+        const op=this.store.get(candidate.id);
         try {
           if(op.state==='confirming_payment')await this.reconcilePayment(op);
           else if(op.state==='queued')await this.dispatch(op);
