@@ -130,7 +130,8 @@ export class Engine {
         if(output.waiting){
           const guest=randomBytes(32).toString('base64url');
           op.data.guestExpires=(Date.parse(op.data.input.scheduledAt)||Date.now())+3600000;
-          op.data.result={meetingUrl:`${this.env.WIKSHI_PUBLIC_ORIGIN}/meet#${guest}`,scheduledAt:op.data.input.scheduledAt};
+          op.data.result={meetingUrl:output.private.hosted?`https://bey.chat/${output.private.agentId}`:`${this.env.WIKSHI_PUBLIC_ORIGIN}/meet#${guest}`,scheduledAt:op.data.input.scheduledAt,
+            ...(output.private.hosted?{admission:'provider_hosted_not_strictly_one_use'}:{})};
           this.store.atomic(()=>{this.store.db.prepare('INSERT INTO guests(hash,operation) VALUES(?,?)').run(hash(guest),op.id);this.store.save(op);});
         } else this.store.save(op);
       }
@@ -207,7 +208,12 @@ export class Engine {
               if(Date.now()-op.data.transcriptObservedAt<10000)continue;
               this.finish(op,{transcript:done.transcript},done.seconds);op.data.cleanupPending=Boolean(op.data.private?.agentId);this.store.save(op);
             }
-          } else if(op.state==='awaiting_guest' && op.data.guestExpires<Date.now()){this.fail(op,'meeting_expired');op.data.cleanupPending=true;this.store.save(op);}
+          } else if(op.state==='awaiting_guest'){
+            // Hosted admission happens on bey.chat, not through our join endpoint.
+            const callId=op.data.private?.hosted?await this.providers.findHostedCall(op):null;
+            if(callId){op.data.private.callId=callId;op.state='running';this.store.save(op);}
+            else if(op.data.guestExpires<Date.now()){this.fail(op,'meeting_expired');op.data.cleanupPending=true;this.store.save(op);}
+          }
           else if(op.state==='awaiting_payment' && op.data.expires<Date.now()){op.state='expired';this.store.save(op);}
         } catch {/* Keep durable state for the next read-only reconciliation. */}
         this.store.db.prepare('UPDATE operations SET updated=? WHERE id=?').run(Date.now(),op.id);

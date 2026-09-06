@@ -32,7 +32,7 @@ test('payer inbox survives restart; payments and credentials never change its ad
 test('inbox is included, not a second paid product; voice stays blocked without proven cap',()=>{
   const entries=catalog({...env,WIKSHI_MERCHANT_ACCOUNT:'0.0.1',WIKSHI_MERCHANT_KEY:'fixture',WIKSHI_PRICE_INBOX:'1',WIKSHI_PRICE_PHONE_SECOND:'1',AGENTPHONE_API_KEY:'fixture'});
   assert.equal(entries.length,14);assert.equal(entries.find(s=>s.id==='email.inbox').enabled,false);
-  assert.equal(entries.find(s=>s.id==='phone.call').availabilityReason,'duration_enforcement_unverified');
+  assert.equal(entries.find(s=>s.id==='phone.call').availabilityReason,'configuration_required');
   assert.equal(new Providers({}).provisionInbox('0.0.1','auth',makeStore()),null);
 });
 test('documented Exa categories and contents use distinct bounded contracts',async()=>{
@@ -112,4 +112,14 @@ test('video quotes require explicit confirmed API entitlement',()=>{
   const config={BEY_API_KEY:'fixture',BEY_AVATAR_ID:'fixture',WIKSHI_PRICE_VIDEO_SECOND:'1',WIKSHI_MERCHANT_ACCOUNT:'0.0.123',WIKSHI_MERCHANT_KEY:'fixture'};
   assert.equal(catalog(config).find(s=>s.id==='video.meeting').enabled,false);
   assert.equal(catalog({...config,WIKSHI_VIDEO_API_READY:'true'}).find(s=>s.id==='video.meeting').enabled,true);
+  assert.equal(catalog({...config,WIKSHI_VIDEO_MODE:'hosted'}).find(s=>s.id==='video.meeting').enabled,true);
+});
+test('phone adapter never requests hangup, even after an old persisted deadline',async()=>{
+  const requests=[],p=new Providers({},async(url,options)=>{requests.push({url,method:options.method});return Response.json({status:'in-progress'});});
+  assert.equal(await p.poll({data:{service:'phone.call',private:{callId:'call_test',deadline:1}}}),null);
+  assert.equal(requests.length,1);assert.equal(requests[0].method,'GET');assert.ok(!requests[0].url.endsWith('/end'));
+});
+test('hosted discovery uses only the dedicated agent and never creates a programmatic call',async()=>{
+  const requests=[],p=new Providers({},async(url,options)=>{requests.push({url,method:options.method});return Response.json({data:[{id:'other',agent_id:'unrelated',status:{type:'completed',started_at:'2026-09-06T00:00:00Z'}},{id:'ours',agent_id:'dedicated',status:{type:'ongoing',started_at:'2026-09-06T01:00:00Z'}}],has_more:false});});
+  assert.equal(await p.findHostedCall({data:{private:{agentId:'dedicated'}}}),'ours');assert.equal(requests[0].method,'GET');
 });

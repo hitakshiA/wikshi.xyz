@@ -39,7 +39,8 @@ export function validate(service,input) {
   if(service==='email.reply' && (!string(input.inboxId,36,36) || !string(input.messageId,36,36) || !string(input.text,1,10000)))throw new ApiError('invalid_message');
   if (['phone.call','video.meeting','email.send','email.reply'].includes(service) && input.consent!==true) throw new ApiError('consent_required');
   if (['phone.call','video.meeting'].includes(service)) {
-    if (!string(input.mission,10,6000) || ![60,120,180].includes(input.maxSeconds)) throw new ApiError('invalid_mission');
+    const validDuration=service==='phone.call'?Number.isInteger(input.maxSeconds)&&input.maxSeconds>=60&&input.maxSeconds<=600:[60,120,180].includes(input.maxSeconds);
+    if (!string(input.mission,10,6000) || !validDuration) throw new ApiError('invalid_mission');
     if (service==='phone.call' && !/^\+[1-9]\d{7,14}$/.test(input.phone||'')) throw new ApiError('invalid_phone');
     if (service==='video.meeting' && (!Array.isArray(input.questions) || input.questions.length<1 || input.questions.length>3 || input.questions.some(q=>!string(q,3,250)))) throw new ApiError('invalid_questions');
     if (service==='video.meeting' && input.scheduledAt!==undefined && (!Number.isFinite(Date.parse(input.scheduledAt)) || Date.parse(input.scheduledAt)<Date.now()-60000 || Date.parse(input.scheduledAt)>Date.now()+86400000*7)) throw new ApiError('invalid_schedule');
@@ -61,14 +62,15 @@ export function catalog(env) {
     ['email.inbox','Durable inbox included with verified payment','WIKSHI_PRICE_INBOX',false,'request'],
     ['email.send','Send an email from your agent inbox','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
     ['email.reply','Reply to an owned inbox message','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
-    // No documented provider-enforced duration cap. Never sell bounded calls on a prompt alone.
-    ['phone.call','Make a bounded voice call','WIKSHI_PRICE_PHONE_SECOND',false,'second'],
-    ['video.meeting','One-use video conversation','WIKSHI_PRICE_VIDEO_SECOND',Boolean(env.BEY_API_KEY && env.BEY_AVATAR_ID && env.WIKSHI_VIDEO_API_READY==='true'),'second'],
+    ['phone.call','Outbound voice call with a private transcript','WIKSHI_PRICE_PHONE_SECOND',Boolean(env.AGENTPHONE_API_KEY && env.AGENTPHONE_AGENT_ID && env.WIKSHI_PHONE_ENABLED==='true'),'second'],
+    ['video.meeting','Hosted video conversation with a private transcript','WIKSHI_PRICE_VIDEO_SECOND',Boolean(env.BEY_API_KEY && env.BEY_AVATAR_ID && (env.WIKSHI_VIDEO_MODE==='hosted'||env.WIKSHI_VIDEO_API_READY==='true')),'second'],
   ];
-  return entries.map(([id,name,rateKey,ready,unit])=>({id,name,unit,rateAtomic:price(rateKey),currency:'USDC',decimals:6,maxSeconds:unit==='second'?180:undefined,
+  return entries.map(([id,name,rateKey,ready,unit])=>({id,name,unit,rateAtomic:price(rateKey),currency:'USDC',decimals:6,maxSeconds:id==='phone.call'?600:unit==='second'?180:undefined,
+    durationEnforcement:id==='phone.call'?'none_customer_billing_ceiling_only':undefined,
+    admission:id==='video.meeting'&&env.WIKSHI_VIDEO_MODE==='hosted'?'provider_hosted_not_strictly_one_use':undefined,
     enabled:Boolean(ready && price(rateKey) && env.WIKSHI_MERCHANT_ACCOUNT && env.WIKSHI_MERCHANT_KEY),
     acceptedInputFields:serviceInputs[id],
-    availabilityReason:id==='email.inbox'?'included_with_verified_payment_use_get_inboxes':id==='phone.call'?'duration_enforcement_unverified':!ready?'configuration_required':!price(rateKey)?'price_required':(!env.WIKSHI_MERCHANT_ACCOUNT || !env.WIKSHI_MERCHANT_KEY)?'payment_configuration_required':'configured',
+    availabilityReason:id==='email.inbox'?'included_with_verified_payment_use_get_inboxes':!ready?'configuration_required':!price(rateKey)?'price_required':(!env.WIKSHI_MERCHANT_ACCOUNT || !env.WIKSHI_MERCHANT_KEY)?'payment_configuration_required':'configured',
     verification:id==='network.inspect'?'live_testnet_verified':'adapter_only_not_live_verified',
     rounding:unit==='second'?'ceil-second':'one-request'}));
 }

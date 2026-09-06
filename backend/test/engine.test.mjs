@@ -146,7 +146,8 @@ test('definitive admission denial queues full refund; uncertain admission does n
 });
 test('input rejects arbitrary upstream URLs, overlong meetings and missing consent',()=>{
   assert.throws(()=>validate('discovery.search',{query:'research',limit:2,url:'http://127.0.0.1'}),/invalid_input/);
-  assert.throws(()=>validate('phone.call',{phone:'+15551234567',mission:'Ask about the project',maxSeconds:360,consent:true}),/invalid_mission/);
+  assert.throws(()=>validate('phone.call',{phone:'+15551234567',mission:'Ask about the project',maxSeconds:601,consent:true}),/invalid_mission/);
+  assert.equal(validate('phone.call',{phone:'+15551234567',mission:'Ask about the project',maxSeconds:600,consent:true}).maxSeconds,600);
   assert.throws(()=>validate('phone.call',{phone:'+15551234567',mission:'Ask about the project',maxSeconds:60}),/consent_required/);
 });
 test('provider errors never expose upstream secrets, and ambiguous writes remain uncertain',async()=>{

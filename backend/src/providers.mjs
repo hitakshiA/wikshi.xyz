@@ -79,21 +79,20 @@ export class Providers {
       return {done:true,result:{messageId,status:'accepted'}};
     }
     if(service==='phone.call') {
-      // Adapter is intentionally disabled in the sellable catalog until hard-cap validation.
       const agent=await this.phone(`/agents/${encodeURIComponent(this.env.AGENTPHONE_AGENT_ID)}`);
       if(agent.enableMessaging!==false)throw new ProviderError();
       const data=await this.phone('/calls','POST',{agentId:this.env.AGENTPHONE_AGENT_ID,toNumber:input.phone,disableRecording:true,
-        initialGreeting:"I'm Wikshi, an AI assistant. This call is transcribed for your agent. May we continue?",
-        systemPrompt:`Finish within ${input.maxSeconds} seconds. Ask related questions together, be concise, identify as AI, respect refusals. Do not send messages, transfer calls, make purchases or commitments. Mission: ${input.mission}`});
+        initialGreeting:"I'm Wikshi, an AI representative for the person or team who arranged this call. They'll receive a transcript. May we continue?",
+        systemPrompt:`Ask related questions together, be concise, identify as AI, respect refusals. Do not send messages, transfer calls, make purchases or commitments. Mission: ${input.mission}`});
       if(!data.id)throw new ProviderError(true);
-      return {done:false,private:{callId:data.id,deadline:Date.now()+input.maxSeconds*1000}};
+      return {done:false,private:{callId:data.id}};
     }
     if(service==='video.meeting') {
       const agent=await this.bey('/agents','POST',{name:'Wikshi',avatar_id:this.env.BEY_AVATAR_ID,language:'en',max_session_length_minutes:input.maxSeconds/60,
         greeting:`I'm Wikshi, an AI representative for the person or team who invited you. They'll receive a transcript. May we continue? ${input.questions[0]}`,
         system_prompt:`Conduct a focused conversation comfortably within ${input.maxSeconds} seconds. Identify as AI and obtain consent. No big introduction or rigid questionnaire. Ask related questions together, adapt to answers, respect refusals, and summarize only confirmed facts. Never promise external actions or commitments. Mission: ${input.mission}\nEssential questions: ${input.questions.join(' / ')}`});
       if(!agent.id)throw new ProviderError(true);
-      return {done:false,waiting:true,private:{agentId:agent.id}};
+      return {done:false,waiting:true,private:{agentId:agent.id,hosted:this.env.WIKSHI_VIDEO_MODE==='hosted'}};
     }
     throw new ProviderError();
   }
@@ -116,7 +115,6 @@ export class Providers {
     const id=encodeURIComponent(op.data.private.callId);
     const data=await this.phone(`/calls/${id}`);
     if(!['completed','failed'].includes(data.status)){
-      if(Date.now()>=op.data.private.deadline)await this.phone(`/calls/${id}/end`,'POST',{});
       return null;
     }
     const seconds=data.durationSeconds;
@@ -124,4 +122,15 @@ export class Providers {
     return {seconds,transcript:data.transcripts};
   }
   async cleanup(op) {if(op.data.service==='video.meeting' && op.data.private?.agentId)await this.bey(`/agents/${encodeURIComponent(op.data.private.agentId)}`,'DELETE');}
+  async findHostedCall(op){
+    const calls=[];let cursor;
+    do{
+      const page=await this.bey(`/calls?limit=50${cursor?`&cursor=${encodeURIComponent(cursor)}`:''}`);
+      if(!Array.isArray(page.data)||(page.has_more&&!page.next_cursor))throw new ProviderError();
+      calls.push(...page.data);cursor=page.next_cursor;if(calls.length>1000)throw new ProviderError();
+    }while(cursor);
+    const own=calls.filter(c=>c.agent_id===op.data.private.agentId && ['ongoing','completed'].includes(c.status?.type));
+    own.sort((a,b)=>Date.parse(a.status.started_at)-Date.parse(b.status.started_at));
+    return own[0]?.id;
+  }
 }
