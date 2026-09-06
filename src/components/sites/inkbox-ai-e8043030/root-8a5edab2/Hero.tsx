@@ -32,6 +32,50 @@ export function Hero() {
   const [copyState, setCopyState] = useState<'Copy' | 'Copied' | 'Retry'>('Copy');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const marqueeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const row = marqueeRef.current;
+    if (!row) return;
+    const mobile = window.matchMedia('(max-width: 767px)');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame = 0, last = 0, resumeAt = 0, touching = false;
+    let position = row.scrollLeft;
+    const start = () => { touching = true; };
+    const release = () => { touching = false; resumeAt = performance.now() + 2500; };
+    const wheel = () => { resumeAt = performance.now() + 2500; };
+    const reset = () => { row.scrollLeft = 0; position = 0; };
+    const tick = (now: number) => {
+      const delta = Math.min(now - (last || now), 50);
+      last = now;
+      if (mobile.matches && !reduced.matches && !document.hidden && !touching && now >= resumeAt && !row.querySelector(':focus-visible')) {
+        const distance = row.querySelector<HTMLElement>('.quickstart-marquee-group')?.offsetWidth ?? 0;
+        if (distance > 0) {
+          position = (position + delta * .028) % distance;
+          row.scrollLeft = position;
+        }
+      } else {
+        position = row.scrollLeft;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    row.addEventListener('pointerdown', start, {passive: true});
+    row.addEventListener('wheel', wheel, {passive: true});
+    window.addEventListener('pointerup', release, {passive: true});
+    window.addEventListener('pointercancel', release, {passive: true});
+    mobile.addEventListener('change', reset);
+    reduced.addEventListener('change', reset);
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      row.removeEventListener('pointerdown', start);
+      row.removeEventListener('wheel', wheel);
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+      mobile.removeEventListener('change', reset);
+      reduced.removeEventListener('change', reset);
+    };
+  }, []);
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
@@ -79,13 +123,12 @@ export function Hero() {
       const props = attributesToProps(node.attribs);
       const children = () => domToReact(node.children as DOMNode[], options);
       if (node.attribs.role === 'tablist') {
-        return <div {...props} className={`${node.attribs.class} quickstart-marquee`}>
+        return <div {...props} ref={marqueeRef} className={`${node.attribs.class} quickstart-marquee`}>
           <div className="quickstart-marquee-track" role="presentation">
             <div className="quickstart-marquee-group" role="presentation">{children()}</div>
             <div className="quickstart-marquee-group quickstart-marquee-copy" aria-hidden="true">
               {tabs.map((tab, index) => <button key={index} type="button" tabIndex={-1}
                 className={tabs[activeTab === index ? 0 : 1].attribs.class}
-                onPointerDown={event => event.preventDefault()}
                 onClick={() => selectTab(index)}>
                 {domToReact(tab.children as DOMNode[], options)}
               </button>)}
