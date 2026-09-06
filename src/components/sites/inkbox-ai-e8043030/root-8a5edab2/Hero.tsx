@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { attributesToProps, domToReact, Element, htmlToDOM, type DOMNode, type HTMLReactParserOptions } from 'html-react-parser';
 import markup from './wikshi-markup.json';
 import {CourierSky} from './CourierSky';
+import {wikshiPrompt} from '@/lib/wikshi-prompt';
 
 const source = htmlToDOM(markup.Hero);
 
@@ -25,7 +26,10 @@ function textContent(node: DOMNode): string {
   return '';
 }
 
-const commands = commandParagraphs.map((node) => textContent(node).replace(/^\$\s*/, ''));
+const commands = commandParagraphs.map((node, index) => {
+  const mission = textContent(node).match(/Use Wikshi to (.*?)\. Pay via/)?.[1];
+  return wikshiPrompt(index === 0 || !mission ? undefined : `Use Wikshi to ${mission}.`);
+});
 
 export function Hero() {
   const [activeTab, setActiveTab] = useState(0);
@@ -106,7 +110,7 @@ export function Hero() {
 
   async function copyCommand() {
     try {
-      await navigator.clipboard.writeText(commands[activeTab].replace('/wikshi/skills.md',new URL('/wikshi/skills.md',window.location.origin).href));
+      await navigator.clipboard.writeText(commands[activeTab]);
       setCopyState('Copied');
     } catch {
       setCopyState('Retry');
@@ -155,7 +159,7 @@ export function Hero() {
         const selected = paragraphIndex % tabs.length === activeTab;
         return <p {...props} aria-hidden={!selected}
           className={node.attribs.class.replace(/\b(?:invisible|visible)\b/g, selected ? 'visible' : 'invisible')}
-        >{children()}</p>;
+        >{paragraphIndex >= tabs.length ? commands[paragraphIndex - tabs.length] : children()}</p>;
       }
       if (copyButtons.includes(node)) {
         return <button {...props} onClick={copyCommand}
