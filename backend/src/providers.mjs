@@ -7,6 +7,7 @@ export class Providers {
   async request(url, {method='GET',headers={},body}={}) {
     try {
       const response=await this.fetch(url,{method,headers:{'Content-Type':'application/json',...headers},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000),redirect:'error'});
+      if (method==='DELETE' && response.status===404)return {};
       if (!response.ok) throw new ProviderError(method!=='GET' && response.status>=500);
       if (response.status===204) return {};
       const reader=response.body.getReader();let size=0;const chunks=[];

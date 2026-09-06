@@ -118,5 +118,7 @@ test('HTTP returns x402 challenge and no result without scoped bearer',async()=>
     assert.equal(response.status,402);assert.ok(response.headers.get('payment-required'));const op=await response.json();
     assert.equal((await fetch(`${origin}/v1/operations/${op.id}`)).status,401);
     assert.equal((await fetch(`${origin}/v1/operations/${op.id}`,{headers:{Authorization:`Bearer ${randomBytes(32).toString('base64url')}`}})).status,404);
+    const retried=await fetch(`${origin}/v1/operations`,{method:'POST',headers:{Authorization:`Bearer ${credential}`,'Content-Type':'application/json','Idempotency-Key':'test-request-00001','Payment-Signature':Buffer.from('{}').toString('base64')},body:JSON.stringify({service:'network.inspect',input:{account:'0.0.1'}})});
+    assert.equal(retried.status,202);assert.ok(retried.headers.get('payment-response'));
   }finally{await new Promise(r=>server.close(r));}
 });

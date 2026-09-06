@@ -159,16 +159,25 @@ export class Engine {
   async tick() {
     if(this.busy)return;this.busy=true;
     try {
-      for(const op of this.store.list(['confirming_payment','queued','running','awaiting_guest','awaiting_payment'])) {
+      for(const op of ['confirming_payment','queued','running','awaiting_guest','awaiting_payment'].flatMap(state=>this.store.list([state]))) {
         try {
           if(op.state==='confirming_payment')await this.reconcilePayment(op);
           else if(op.state==='queued')await this.dispatch(op);
           else if(op.state==='running') {
             const done=await this.providers.poll(op);
-            if(done){this.finish(op,{transcript:done.transcript},done.seconds);op.data.cleanupPending=Boolean(op.data.private?.agentId);this.store.save(op);}
+            if(done){
+              // Completion and transcript availability can arrive separately. Wait for two
+              // identical reads ten seconds apart before archiving and deleting the agent.
+              if(done.seconds>0 && done.transcript.length===0)continue;
+              const fingerprint=hash(JSON.stringify(done.transcript));
+              if(op.data.transcriptCandidate!==fingerprint){op.data.transcriptCandidate=fingerprint;op.data.transcriptObservedAt=Date.now();this.store.save(op);continue;}
+              if(Date.now()-op.data.transcriptObservedAt<10000)continue;
+              this.finish(op,{transcript:done.transcript},done.seconds);op.data.cleanupPending=Boolean(op.data.private?.agentId);this.store.save(op);
+            }
           } else if(op.state==='awaiting_guest' && op.data.guestExpires<Date.now()){this.fail(op,'meeting_expired');op.data.cleanupPending=true;this.store.save(op);}
           else if(op.state==='awaiting_payment' && op.data.expires<Date.now()){op.state='expired';this.store.save(op);}
         } catch {/* Keep durable state for the next read-only reconciliation. */}
+        this.store.db.prepare('UPDATE operations SET updated=? WHERE id=?').run(Date.now(),op.id);
       }
       // Scan pending work, not the first N historical completed operations.
       const rows=this.store.db.prepare("SELECT id FROM operations WHERE state IN ('completed','failed')").all();

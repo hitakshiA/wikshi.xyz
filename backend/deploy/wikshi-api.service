@@ -13,6 +13,7 @@ Environment=NODE_ENV=production
 Environment=PORT=8080
 EnvironmentFile=/etc/wikshi/backend.env
 StateDirectory=wikshi
+StateDirectoryMode=0700
 ReadWritePaths=/var/lib/wikshi
 Restart=on-failure
 RestartSec=5

@@ -62,7 +62,13 @@ export function createApi(engine) {
     }
     const token=credential(req);
     if(req.method==='POST' && req.url==='/v1/operations'){
-      const data=await body(req), op=await engine.quote(data.service,data.input,token,req.headers['idempotency-key']);
+      const data=await body(req);let op=await engine.quote(data.service,data.input,token,req.headers['idempotency-key']);
+      if(req.headers['payment-signature']){
+        let payment;try{payment=JSON.parse(Buffer.from(req.headers['payment-signature'],'base64').toString());}catch{throw new ApiError('invalid_payment');}
+        op=await engine.pay(op.id,token,payment);
+        if(op.data.payment?.confirmed)res.setHeader('PAYMENT-RESPONSE',Buffer.from(JSON.stringify({success:true,network:'hedera:testnet',transaction:op.data.payment.tx,payer:op.data.payment.payer})).toString('base64'));
+        return send(op.state==='payment_rejected'?402:202,engine.view(op));
+      }
       if(op.state==='awaiting_payment'){
         const challenge=engine.challenge(op);res.setHeader('PAYMENT-REQUIRED',Buffer.from(JSON.stringify(challenge)).toString('base64'));
         return send(402,{...engine.view(op),paymentRequired:challenge});
