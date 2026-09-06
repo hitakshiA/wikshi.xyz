@@ -1,6 +1,8 @@
 # Agent API contract
 
-Base URL: `https://api.wikshi.xyz` after deployment. Money is integer strings of USDC atomic units (6 decimals). Read `/v1/services` for actual availability and rates. Disabled services reject before charging. `network.inspect` retrieves real public chain data; it is not a substitute for live-testing communication providers.
+Base URL: `https://api.wikshi.xyz`. Payments accept USDC (`0.0.429274`, 6 decimals) or native HBAR (`0.0.0`, 8 decimals) on Hedera testnet only. Money is an integer string in the selected asset's smallest unit: 1 USDC = 1,000,000 atomic units; 1 HBAR = 100,000,000 tinybars. Read `/v1/services` for actual availability and each service's `prices` array. Legacy `rateAtomic/currency/decimals` fields continue to describe USDC only; an HBAR-only service has a null legacy rate. Disabled services reject before charging. `network.inspect` retrieves public chain data; it is not a substitute for live-testing communication providers.
+
+Prices are independently configured demo rates, not an exchange-rate conversion. A quote offers each configured currency in `paymentRequired.accepts`; select exactly one. Its entire requirement must be echoed unchanged in `payment.accepted`. The server locks the asset, rate, and amount atomically on the first valid payment attempt. Subsequent retries cannot switch currencies or pay twice. Old single-USDC quotes and purchases retain their original terms. Final live HBAR payment/refund verification is pending; local tests do not establish facilitator settlement success.
 
 ## Authentication without signup
 
@@ -11,10 +13,10 @@ Generate 32 random bytes as base64url (43 characters). Keep them secret and send
 1. `GET /v1/services`: manifest, network, availability, rates, units and limits.
 2. `POST /v1/operations` with Authorization, JSON Content-Type, `Idempotency-Key` (16-100 URL-safe characters), and `{ "service":"network.inspect", "input":{"account":"0.0.7284970"} }`.
 3. HTTP 402 returns an operation ID and `paymentRequired`, also base64-encoded in `PAYMENT-REQUIRED`. Quotes expire after five minutes. Same credential/idempotency key returns the same operation; changed input returns 409.
-4. Sign the quoted exact USDC transfer on `hedera:testnet` using `extra.feePayer`. **Set the transaction memo to `wikshi:<operation-id>` before freezing/signing.** This required Wikshi binding is advertised in `extensions.wikshi.transactionMemo`; generic clients must support it. `src/payments/hedera.mjs:signQuote` is the reference implementation. The API never receives the customer's private key.
+4. Select the user's authorized currency from `accepts`, then sign that exact transfer on `hedera:testnet` using its `extra.feePayer`. For USDC use token transfers; for HBAR use native HBAR transfers denominated in tinybars, not token `0.0.0` transfers. **Set the transaction memo to `wikshi:<operation-id>` before freezing/signing.** This required Wikshi binding is advertised in `extensions.wikshi.transactionMemo`; generic clients must support it. `src/payments/hedera.mjs:signQuote` supports both assets. The API never receives the customer's private key.
 5. `POST /v1/operations/<id>/pay` with the same credential, JSON `{}`, and `PAYMENT-SIGNATURE: <base64 JSON payment payload>`. Alternatively send `{ "payment": <payload> }`. Payload: `{x402Version:2,accepted:<unchanged requirements>,payload:{transaction:<base64 signed bytes>}}`.
 6. HTTP 202 means payment confirmation or execution is progressing. Work is queued only after both submission and independent Mirror confirmation. `PAYMENT-RESPONSE` appears when confirmed. Clients may also retry the original POST `/v1/operations` with the same body, credential, idempotency key and `PAYMENT-SIGNATURE` header.
-7. `GET /v1/operations/<id>` with the credential returns status, result, signed receipt and refund state. Retrieval has no second payment. Poll every 5-10 seconds.
+7. `GET /v1/operations/<id>` with the credential returns status, result, signed receipt and refund state. `paymentOptions` describes the original quote choices; `payment` identifies the locked asset, amount, decimals and confirmation flag after payment begins. Refunds include their asset, currency and decimals. Retrieval has no second payment. Poll every 5-10 seconds.
 
 A timeout is not proof of failure. Query the original operation; do not sign another transfer for a payment in progress. A transaction cannot fund a second operation, even at the same price.
 
@@ -40,7 +42,7 @@ Unknown fields are rejected. No upstream URLs, custom headers or callback destin
 
 ### Durable payer inboxes
 
-One persistent inbox belongs to each independently verified Hedera testnet payer account. Once email infrastructure is configured, any confirmed x402 purchase provisions it without another inbox charge. Existing confirmed payers are backfilled on startup. The operation includes an `inbox` object with its stable `id` and `address`. It is separate from the per-purchase result and receipt. Addresses do not rotate when a meeting ends, a new payment occurs, or the server restarts.
+One persistent inbox belongs to each independently verified Hedera testnet payer account, independent of payment currency. USDC and HBAR purchases from the same payer access the same inbox. Once email infrastructure is configured, any confirmed x402 purchase provisions it without another inbox charge. Existing confirmed payers are backfilled on startup. The operation includes an `inbox` object with its stable `id` and `address`. It is separate from the per-purchase result and receipt. Addresses do not rotate when a meeting ends, a new payment occurs, or the server restarts.
 
 `email.inbox` remains a disabled legacy catalog entry: use the included inbox, not a second paid operation. Until sending DNS, receiving MX, webhook verification and transport keys are configured, the backend does not invent an operational email address.
 
@@ -73,7 +75,9 @@ Normal flow: `awaiting_payment → verifying_payment → settling_payment → co
 
 ## Receipts and refunds
 
-Fixed requests charge one unit. Calls bill `min(maxSeconds,ceil(measuredSeconds)) × rateAtomic`. Unused prepaid USDC is refunded separately to the confirmed payer. Waiting for a guest is not billed. Over-cap provider time is absorbed, not charged beyond the quote.
+Fixed requests charge one unit. Calls bill `min(maxSeconds,ceil(measuredSeconds)) × rateAtomic` in the locked currency. Unused prepaid funds are refunded separately to the confirmed payer **in the same asset paid**, never converted. Waiting for a guest is not billed. Over-cap provider time is absorbed, not charged beyond the quote. New signed receipts include `asset`, `currency`, and `decimals`; previously signed receipts remain unchanged.
+
+Native HBAR Mirror transfer balances include network fees. Confirmation separates the exact transfer from the fee charged to the transaction-ID account (facilitator for purchases, merchant for refunds). The merchant funds refund fees separately; the customer's refund amount is not reduced by those fees. Both merchant USDC liquidity and HBAR balance must be sufficient for liabilities and network fees.
 
 `GET /v1/receipt-key` returns the Ed25519 public JWK. Verify `receipt.signature` against the decoded bytes of `receipt.signedPayload`, not reserialized JSON. Trust the key obtained over Wikshi TLS. The signed receipt commits to usage and result hash, not independent proof of provider honesty.
 

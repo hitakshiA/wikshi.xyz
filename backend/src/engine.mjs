@@ -1,7 +1,7 @@
 import {randomUUID,randomBytes,createPrivateKey,createPublicKey,sign,createHmac} from 'node:crypto';
 import {hash} from './store.mjs';
 import {ApiError,catalog,validate,emailAddress} from './catalog.mjs';
-import {Blocky,NETWORK,USDC} from './payments/blocky.mjs';
+import {Blocky,NETWORK,ASSETS} from './payments/blocky.mjs';
 import {inspectPayment,confirmTransfer} from './payments/hedera.mjs';
 
 export class Engine {
@@ -20,10 +20,12 @@ export class Engine {
   view(op) {
     const data=op.data;
     return {id:op.id,service:data.service,status:op.state,createdAt:new Date(op.created).toISOString(),expiresAt:new Date(data.expires).toISOString(),
-      result:data.result,inbox:data.inbox,receipt:data.receipt,refund:data.refund?{status:data.refund.status,amountAtomic:data.refund.amount,transaction:data.refund.status==='confirmed'?data.refund.tx:undefined}:undefined,
+      paymentOptions:(data.offers||[{requirements:data.requirements,price:data.price}]).map(o=>({...ASSETS[o.requirements.asset],amountAtomic:o.requirements.amount,rateAtomic:o.price.rateAtomic})),
+      payment:data.payment?{...ASSETS[data.requirements.asset],amountAtomic:data.requirements.amount,confirmed:data.payment.confirmed===true}:undefined,
+      result:data.result,inbox:data.inbox,receipt:data.receipt,refund:data.refund?{...ASSETS[data.requirements.asset],status:data.refund.status,amountAtomic:data.refund.amount,transaction:data.refund.status==='confirmed'?data.refund.tx:undefined}:undefined,
       error:data.error?{code:data.error}:undefined};
   }
-  challenge(op) {return {x402Version:2,resource:{url:`${this.env.WIKSHI_PUBLIC_ORIGIN}/v1/operations/${op.id}/pay`,description:'Wikshi service operation',mimeType:'application/json'},accepts:[op.data.requirements],extensions:{wikshi:{transactionMemo:`wikshi:${op.id}`,operationId:op.id}}};}
+  challenge(op) {return {x402Version:2,resource:{url:`${this.env.WIKSHI_PUBLIC_ORIGIN}/v1/operations/${op.id}/pay`,description:'Wikshi service operation',mimeType:'application/json'},accepts:op.data.offers?.map(o=>o.requirements)||[op.data.requirements],extensions:{wikshi:{transactionMemo:`wikshi:${op.id}`,operationId:op.id}}};}
   async quote(service,input,credential,idem) {
     if(!/^[A-Za-z0-9_-]{16,100}$/.test(idem||''))throw new ApiError('idempotency_key_required');
     const auth=hash(credential), normalized=validate(service,input), requestHash=hash(JSON.stringify({service,input:normalized}));
@@ -43,10 +45,13 @@ export class Engine {
       if(!emailAddress(recipient) || /[\r\n]/.test(message.subject||''))throw new ApiError('invalid_reply_target');
     }
     if(service==='email.send' && !this.store.resource(input.inboxId,auth))throw new ApiError('inbox_not_found',404);
-    const amount=(BigInt(entry.rateAtomic)*BigInt(entry.unit==='second'?input.maxSeconds:1)).toString();
-    const requirements=await this.blocky.requirements({payTo:this.env.WIKSHI_MERCHANT_ACCOUNT,amount});
+    const offers=await Promise.all(entry.prices.map(async price=>({
+      requirements:await this.blocky.requirements({payTo:this.env.WIKSHI_MERCHANT_ACCOUNT,asset:price.asset,amount:(BigInt(price.rateAtomic)*BigInt(entry.unit==='second'?input.maxSeconds:1)).toString()}),
+      price:{...price,unit:entry.unit},
+    })));
+    const {requirements,price}=offers[0];
     const now=Date.now(), id=randomUUID();
-    const op={id,auth,idem,request_hash:requestHash,state:'awaiting_payment',created:now,data:{service,input:normalized,price:entry,requirements,expires:now+300000}};
+    const op={id,auth,idem,request_hash:requestHash,state:'awaiting_payment',created:now,data:{service,input:normalized,price,requirements,offers,expires:now+300000}};
     return this.store.atomic(()=>{const existing=this.store.find(auth,idem);if(existing){if(existing.request_hash!==requestHash)throw new ApiError('idempotency_conflict',409);return existing;}
       const pending=this.store.db.prepare("SELECT COUNT(*) AS n FROM operations WHERE auth=? AND state='awaiting_payment'").get(auth).n;
       if(pending>=20)throw new ApiError('too_many_pending_quotes',429);
@@ -56,14 +61,17 @@ export class Engine {
     let op=this.authorize(id,credential);
     if(op.state!=='awaiting_payment')return op;
     if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);
-    this.blocky.envelope(payload,op.data.requirements);
-    const payment=this.inspect(payload,op.data.requirements,op.id);
+    const selected=(op.data.offers||[{requirements:op.data.requirements,price:op.data.price}]).find(o=>o.requirements.asset===(payload?.accepted?.asset??op.data.requirements.asset));
+    if(!selected)throw new ApiError('payment_asset_not_offered');
+    this.blocky.envelope(payload,selected.requirements);
+    const payment=this.inspect(payload,selected.requirements,op.id);
     const claimed=this.store.atomic(()=>{
       op=this.store.get(id);if(op.state!=='awaiting_payment')return false;
       if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);
       if(this.store.db.prepare('SELECT tx FROM payments WHERE tx=?').get(payment.tx))throw new ApiError('payment_replayed',409);
       if(!this.services().some(s=>s.id===op.data.service && s.enabled))throw new ApiError('service_unavailable',503);
       this.store.db.prepare('INSERT INTO payments VALUES(?,?)').run(payment.tx,id);
+      op.data.requirements=selected.requirements;op.data.price=selected.price;
       op.state='verifying_payment';op.data.payment={...payment,payload};this.store.save(op);return true;
     });
     if(!claimed)return op;
@@ -83,7 +91,7 @@ export class Engine {
   }
   async reconcilePayment(op) {
     try {
-      if(await this.confirm(op.data.payment.tx,{payer:op.data.payment.payer,payTo:op.data.requirements.payTo,amount:op.data.requirements.amount})) {
+      if(await this.confirm(op.data.payment.tx,{payer:op.data.payment.payer,payTo:op.data.requirements.payTo,amount:op.data.requirements.amount,asset:op.data.requirements.asset,memo:`wikshi:${op.id}`})) {
         // Grants follow a freshly verified payment signature, never a public transaction ID.
         this.store.atomic(()=>{this.store.bindPayer(op.auth,op.data.payment.payer);op.state='queued';op.data.payment.confirmed=true;delete op.data.payment.payload;this.store.save(op);});
         this.attachInbox(op);
@@ -100,7 +108,7 @@ export class Engine {
     const units=seconds===undefined?1:Math.min(op.data.input.maxSeconds,Math.ceil(seconds));
     const charged=rate*BigInt(units), returned=prepaid-charged;
     op.state='completed';op.data.result=result;
-    const receipt={version:1,operationId:op.id,network:NETWORK,asset:USDC,paymentTransaction:op.data.payment.tx,prepaidAtomic:prepaid.toString(),
+    const receipt={version:1,operationId:op.id,network:NETWORK,...ASSETS[op.data.requirements.asset],paymentTransaction:op.data.payment.tx,prepaidAtomic:prepaid.toString(),
       unit:op.data.price.unit,rateAtomic:rate.toString(),units,measuredSeconds:seconds,chargedAtomic:charged.toString(),refundDueAtomic:returned.toString(),
       resultHash:hash(JSON.stringify(result)),issuedAt:new Date().toISOString()};
     const canonical=JSON.stringify(receipt);
@@ -169,12 +177,12 @@ export class Engine {
   async refund(op) {
     const r=op.data.refund;if(!r || r.status==='confirmed')return;
     if(r.status==='pending' && this.refundSigner) {
-      const prepared=await this.refundSigner.prepare(op.data.payment.payer,r.amount,op.id);
+      const prepared=await this.refundSigner.prepare(op.data.payment.payer,r.amount,op.id,op.data.requirements.asset);
       Object.assign(r,prepared,{status:'submitting'});this.store.save(op);
       try{await this.refundSigner.submit(prepared);}catch{/* Never generate a new transaction to retry. */}
       r.status='confirming';this.store.save(op);
     }
-    if(r.tx && await this.confirm(r.tx,{payer:this.env.WIKSHI_MERCHANT_ACCOUNT,payTo:op.data.payment.payer,amount:r.amount})) {
+    if(r.tx && await this.confirm(r.tx,{payer:this.env.WIKSHI_MERCHANT_ACCOUNT,payTo:op.data.payment.payer,amount:r.amount,asset:op.data.requirements.asset,memo:`refund:${op.id}`})) {
       r.status='confirmed';delete r.bytes;this.store.save(op);
     }
   }

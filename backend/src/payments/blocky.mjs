@@ -1,5 +1,6 @@
+import {USDC,supportedAsset} from './assets.mjs';
+export {USDC,HBAR,ASSETS} from './assets.mjs';
 export const NETWORK = 'hedera:testnet';
-export const USDC = '0.0.429274';
 const ORIGIN = 'https://api.testnet.blocky402.com';
 const account = /^0\.0\.[1-9]\d*$/;
 
@@ -34,15 +35,15 @@ export class Blocky {
     if (!kind || !account.test(kind.extra?.feePayer ?? '')) throw new PaymentError('payment_network_unavailable');
     return {feePayer: kind.extra.feePayer};
   }
-  async requirements({payTo, amount}) {
-    if (!account.test(payTo) || typeof amount !== 'string' || !/^[1-9]\d{0,17}$/.test(amount)) {
+  async requirements({payTo, amount, asset=USDC}) {
+    if (!supportedAsset(asset) || !account.test(payTo) || typeof amount !== 'string' || !/^[1-9]\d{0,17}$/.test(amount)) {
       throw new PaymentError('invalid_quote');
     }
     const {feePayer} = await this.supported();
-    return {scheme: 'exact', network: NETWORK, asset: USDC, amount, payTo, maxTimeoutSeconds: 120, extra: {feePayer}};
+    return {scheme: 'exact', network: NETWORK, asset, amount, payTo, maxTimeoutSeconds: 120, extra: {feePayer}};
   }
   envelope(payload, requirements) {
-    if (requirements.scheme !== 'exact' || requirements.network !== NETWORK || requirements.asset !== USDC) throw new PaymentError('invalid_quote');
+    if (requirements.scheme !== 'exact' || requirements.network !== NETWORK || !supportedAsset(requirements.asset)) throw new PaymentError('invalid_quote');
     const accepted = payload?.accepted;
     const fields = ['scheme', 'network', 'asset', 'amount', 'payTo', 'maxTimeoutSeconds'];
     if (payload?.x402Version !== 2 || !accepted || fields.some(k => accepted[k] !== requirements[k]) || accepted.extra?.feePayer !== requirements.extra?.feePayer) throw new PaymentError('payment_quote_mismatch');

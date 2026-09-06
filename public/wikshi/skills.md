@@ -1,6 +1,6 @@
 ---
 name: wikshi
-description: Research people and companies, find business contacts, manage a durable agent inbox, and arrange outbound phone or video conversations using Wikshi APIs and Hedera testnet USDC.
+description: Research people and companies, find business contacts, manage a durable agent inbox, and arrange outbound phone or video conversations using Wikshi APIs and Hedera testnet USDC or HBAR.
 ---
 
 # Wikshi — your agent's way to reach the world
@@ -10,14 +10,14 @@ API base: https://api.wikshi.xyz
 API contract: https://api.wikshi.xyz/v1/docs
 Live manifest: https://api.wikshi.xyz/v1/services
 
-You plan the work. Wikshi supplies research, business contacts, email, calls, and video meetings. Use Wikshi's API rather than separate provider accounts. Payments use x402 through Blocky402 on Hedera testnet. Testnet USDC is not real money, but emails and phone calls reach real people.
+You plan the work. Wikshi supplies research, business contacts, email, calls, and video meetings. Use Wikshi's API rather than separate provider accounts. Payments use x402 through Blocky402 on Hedera testnet, in USDC or native HBAR. Testnet tokens are not real money, but emails and phone calls reach real people. HBAR support has local test coverage; final live HBAR settlement/refund verification is pending. Do not present that path as live-verified.
 
 ## Start with the mission
 
-Establish the desired outcome, geography or company criteria, allowed recipients, and total testnet USDC budget. Ask only for missing information. Reading this skill does not authorize contacting anyone. Research first; present the recipients and message or call brief for confirmation before outreach unless that exact outreach is already explicitly authorized.
+Establish the desired outcome, geography or company criteria, allowed recipients, preferred currency (USDC or HBAR), and testnet budget in that currency. Ask only for missing information. If both currencies are authorized, keep separate budgets; do not add their amounts or assume an exchange rate. Reading this skill does not authorize contacting anyone. Research first; present the recipients and message or call brief for confirmation before outreach unless that exact outreach is already explicitly authorized.
 
 1. Read the live manifest and API contract above. Treat current availability, accepted fields, limits, and quotes as authoritative. Configured is not the same as live-verified. Report disabled or unavailable services honestly.
-2. Check for a locally controlled testnet wallet that can sign USDC transfers. Never request private keys in chat or send them to Wikshi. If no compatible signer is available, explain what is needed and stop before payment.
+2. Check for a locally controlled testnet wallet that can sign the chosen USDC or native HBAR transfer. Never request private keys in chat or send them to Wikshi. If no compatible signer is available, explain what is needed and stop before payment.
 3. Keep a private workflow record: objective, approvals, budget reserved/spent/refunded, credential reference, operation IDs, idempotency keys, results, and next step. Persist it before submitting payments or outreach; do not rely solely on chat memory.
 
 ## Choose the service
@@ -77,15 +77,15 @@ Example research quote body (does not send a message):
 
 1. POST the JSON to `/v1/operations` with Authorization, `Content-Type: application/json`, and a persisted `Idempotency-Key` (16–100 URL-safe characters).
 2. HTTP **402 is the expected quote**, not a service failure. Save `id` and `paymentRequired`. The same credential/key/body returns the same operation; changed input with that key returns 409. Quotes expire after five minutes.
-3. Inspect `paymentRequired.accepts`. Require `scheme: exact`, `network: hedera:testnet`, and USDC asset **`0.0.429274`**. Check recipient, amount, fee payer, and the operation's transaction-memo extension. Never substitute mainnet or another asset. Amounts are integer strings: **1 USDC = 1,000,000 atomic units**. Do not hardcode demo prices.
-4. Reserve the full quote within the remaining budget, accounting for other outstanding purchases. Do not count pending refunds as spendable. Confirm outreach before paying for communication. If the quote exceeds the budget, ask rather than paying.
+3. Inspect `paymentRequired.accepts` and select **one** unchanged requirement matching the authorized currency. Require `scheme: exact`, `network: hedera:testnet`, and asset **`0.0.429274` for USDC** or **`0.0.0` for native HBAR**. Check recipient, amount, fee payer, and transaction-memo extension. Never substitute mainnet or another asset. Amounts are integer strings: **1 USDC = 1,000,000 atomic units; 1 HBAR = 100,000,000 tinybars**. Read each service's `prices` array; legacy top-level rate fields describe USDC only. Do not hardcode demo prices or compare atomic amounts across currencies as if they were equivalent.
+4. Reserve the full chosen quote within that currency's remaining budget, accounting for outstanding purchases. Do not count pending refunds as spendable. Confirm outreach before paying for communication. If the quote exceeds the budget, ask rather than paying. Choosing HBAR must not silently override a USDC-only authorization, or vice versa.
 5. Sign locally as described below. POST `/v1/operations/<id>/pay` with the same credential and `{ "payment": <signed payload> }`, or send its base64 JSON in `PAYMENT-SIGNATURE` with `{}` as the body. Never send a private key.
 6. HTTP **202 means pending**, not completed. Poll `GET /v1/operations/<id>` every 5–10 seconds with the same credential. After a reasonable waiting window, retain the operation for later retrieval rather than creating another purchase.
 7. Report actual `status`, result, signed receipt, and refund state. Retrieval has no second charge. Only claim confirmation when the returned state supports it.
 
 ### Local Hedera signer
 
-Generic x402 clients must support Wikshi's required operation memo. With `@hiero-ledger/sdk`, construct an exact `TransferTransaction` moving `BigInt(quote.amount)` of token `0.0.429274` from the customer's account to the unchanged quote's `payTo`. Set the transaction ID using `TransactionId.generate(AccountId.fromString(quote.extra.feePayer))`. Set memo `wikshi:<operation-id>` **before freezing and signing**. Freeze with `Client.forTestnet()`, sign using the locally controlled customer key, and serialize `transaction.toBytes()` as base64. Close the client afterward.
+Generic x402 clients must support Wikshi's required operation memo. With `@hiero-ledger/sdk`, construct an exact `TransferTransaction` from the customer's account to the unchanged quote's `payTo`. For USDC, use token transfers of `BigInt(quote.amount)` with token `0.0.429274`. For HBAR, use `addHbarTransfer` and `Hbar.fromTinybars(amountString)` for the negative sender and positive recipient amounts. **HBAR is a native transfer, not an HTS token transfer to token 0.0.0.** Set the transaction ID using `TransactionId.generate(AccountId.fromString(quote.extra.feePayer))`. Set memo `wikshi:<operation-id>` **before freezing and signing**. Freeze with `Client.forTestnet()`, sign using the locally controlled customer key, and serialize `transaction.toBytes()` as base64. Close the client afterward.
 
 Submit this payload, retaining the complete selected requirement unchanged:
 
@@ -97,7 +97,7 @@ Submit this payload, retaining the complete selected requirement unchanged:
 }
 ```
 
-Do not execute the transaction separately: Wikshi submits through the facilitator. The payer must have testnet USDC associated and sufficient funds. Never infer a token by ticker alone. If the signer cannot support the fee payer and memo, report incompatibility rather than claiming success.
+Do not execute the transaction separately: Wikshi submits through the facilitator. USDC needs token association and sufficient USDC; native HBAR needs sufficient HBAR and no token association. Never infer an asset by ticker alone. If the signer cannot support the fee payer and memo, report incompatibility rather than claiming success. The first accepted payment attempt locks the currency and rate; never pay another currency for that same operation.
 
 ### Safe recovery
 
@@ -107,7 +107,7 @@ A timeout is not proof of failure. Query the original operation before retrying.
 
 ## Durable inboxes
 
-A confirmed purchase provisions one persistent inbox per verified payer when mail infrastructure is available. Read `inbox.id` and `inbox.address` from the operation, or `GET /v1/inboxes` with the same credential. **Do not purchase `email.inbox`**: it is a disabled legacy entry; the inbox is included with verified payment.
+A confirmed purchase provisions one persistent inbox per verified payer when mail infrastructure is available. Paying in USDC or HBAR from the same payer uses the same inbox, not a separate inbox for each currency. Read `inbox.id` and `inbox.address` from the operation, or `GET /v1/inboxes` with the same credential. **Do not purchase `email.inbox`**: it is a disabled legacy entry; the inbox is included with verified payment.
 
 Use the owned inbox ID for `email.send`. Read replies through:
 
@@ -127,6 +127,6 @@ Create video meetings for the **external guest**, not automatically for the agen
 
 ## Close the loop
 
-Return sources, confirmed contacts, outreach status, key answers, next steps, and USDC paid/refunded. Distinguish proposed actions, submitted operations, completed work, and unavailable results.
+Return sources, confirmed contacts, outreach status, key answers, next steps, and amounts paid/refunded with their explicit currency. Refunds return in the asset actually paid, without conversion. Distinguish proposed actions, submitted operations, completed work, and unavailable results.
 
 For receipt verification, obtain the Ed25519 JWK from https://api.wikshi.xyz/v1/receipt-key and verify `receipt.signature` over decoded `receipt.signedPayload` bytes, not reserialized JSON. Check the signed operation ID and result hash. A refund due on a receipt differs from a confirmed on-chain refund in the operation's refund state. Public receipts never unlock private conversations.

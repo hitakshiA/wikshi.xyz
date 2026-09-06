@@ -1,3 +1,4 @@
+import {ASSETS,USDC,HBAR} from './payments/assets.mjs';
 export class ApiError extends Error {constructor(code,status=400){super(code);this.code=code;this.status=status;}}
 const string=(v,min,max)=>typeof v==='string' && v.length>=min && v.length<=max;
 export const emailAddress=v=>string(v,3,254) && /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(v);
@@ -65,12 +66,16 @@ export function catalog(env) {
     ['phone.call','Outbound voice call with a private transcript','WIKSHI_PRICE_PHONE_SECOND',Boolean(env.AGENTPHONE_API_KEY && env.AGENTPHONE_AGENT_ID && env.WIKSHI_PHONE_ENABLED==='true'),'second'],
     ['video.meeting','Hosted video conversation with a private transcript','WIKSHI_PRICE_VIDEO_SECOND',Boolean(env.BEY_API_KEY && env.BEY_AVATAR_ID && (env.WIKSHI_VIDEO_MODE==='hosted'||env.WIKSHI_VIDEO_API_READY==='true')),'second'],
   ];
-  return entries.map(([id,name,rateKey,ready,unit])=>({id,name,unit,rateAtomic:price(rateKey),currency:'USDC',decimals:6,maxSeconds:id==='phone.call'?600:unit==='second'?180:undefined,
+  return entries.map(([id,name,rateKey,ready,unit])=>{
+    const prices=[{...ASSETS[USDC],rateAtomic:price(rateKey)},{...ASSETS[HBAR],rateAtomic:price(`${rateKey}_HBAR`),verification:'local_tests_only_live_verification_pending'}].filter(p=>p.rateAtomic);
+    return {id,name,unit,prices,
+    // Preserve legacy USDC fields. HBAR-only entries leave the legacy rate null.
+    rateAtomic:price(rateKey),currency:'USDC',decimals:6,maxSeconds:id==='phone.call'?600:unit==='second'?180:undefined,
     durationEnforcement:id==='phone.call'?'none_customer_billing_ceiling_only':undefined,
     admission:id==='video.meeting'&&env.WIKSHI_VIDEO_MODE==='hosted'?'provider_hosted_not_strictly_one_use':undefined,
-    enabled:Boolean(ready && price(rateKey) && env.WIKSHI_MERCHANT_ACCOUNT && env.WIKSHI_MERCHANT_KEY),
+    enabled:Boolean(ready && prices.length && env.WIKSHI_MERCHANT_ACCOUNT && env.WIKSHI_MERCHANT_KEY),
     acceptedInputFields:serviceInputs[id],
-    availabilityReason:id==='email.inbox'?'included_with_verified_payment_use_get_inboxes':!ready?'configuration_required':!price(rateKey)?'price_required':(!env.WIKSHI_MERCHANT_ACCOUNT || !env.WIKSHI_MERCHANT_KEY)?'payment_configuration_required':'configured',
+    availabilityReason:id==='email.inbox'?'included_with_verified_payment_use_get_inboxes':!ready?'configuration_required':!prices.length?'price_required':(!env.WIKSHI_MERCHANT_ACCOUNT || !env.WIKSHI_MERCHANT_KEY)?'payment_configuration_required':'configured',
     verification:id==='network.inspect'?'live_testnet_verified':'adapter_only_not_live_verified',
-    rounding:unit==='second'?'ceil-second':'one-request'}));
+    rounding:unit==='second'?'ceil-second':'one-request'};});
 }
