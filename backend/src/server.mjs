@@ -42,7 +42,7 @@ export function createApi(engine) {
     if (req.method === 'GET' && req.url === '/healthz') {
       return send(200,{status:'ok',service:'wikshi-api'});
     } else if (req.method === 'GET' && req.url === '/v1/services') {
-      return send(200,{network:'hedera:testnet',services:engine?.services()||[],status:engine?'configured':'configuration_required'});
+      return send(200,{network:'hedera:testnet',access:'public-testnet',services:engine?.services()||[],status:engine?'configured':'configuration_required'});
     }
     if(!engine)throw new ApiError('not_found',404);
     if(req.method==='POST' && req.url==='/v1/webhooks/email')return send(200,await receiveEmail(engine,await rawBody(req),req.headers));

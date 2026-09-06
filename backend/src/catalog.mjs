@@ -59,7 +59,7 @@ export function catalog(env) {
     ['contacts.reverse','Look up a business profile by email','WIKSHI_PRICE_REVERSE',Boolean(env.QUICKENRICH_API_KEY),'request'],
     ['contacts.company','Find up to twenty company contacts per page','WIKSHI_PRICE_COMPANY_CONTACTS',Boolean(env.QUICKENRICH_API_KEY),'request'],
     ['email.inbox','Durable inbox included with verified payment','WIKSHI_PRICE_INBOX',false,'request'],
-    ['email.send','Send an approved email','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
+    ['email.send','Send an email from your agent inbox','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
     ['email.reply','Reply to an owned inbox message','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
     // No documented provider-enforced duration cap. Never sell bounded calls on a prompt alone.
     ['phone.call','Make a bounded voice call','WIKSHI_PRICE_PHONE_SECOND',false,'second'],

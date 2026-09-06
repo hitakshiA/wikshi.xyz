@@ -42,11 +42,6 @@ export class Engine {
       recipient=message.replyTo||message.from;
       if(!emailAddress(recipient) || /[\r\n]/.test(message.subject||''))throw new ApiError('invalid_reply_target');
     }
-    if(['email.send','email.reply','phone.call'].includes(service)) {
-      const allow=(this.env.WIKSHI_TESTNET_RECIPIENTS||'').split(',').map(x=>x.trim().toLowerCase());
-      const selfTest=ownedInbox?.address?.toLowerCase()===recipient.toLowerCase();
-      if(!selfTest && !allow.includes(recipient.toLowerCase()))throw new ApiError('recipient_not_approved_for_testnet',403);
-    }
     if(service==='email.send' && !this.store.resource(input.inboxId,auth))throw new ApiError('inbox_not_found',404);
     const amount=(BigInt(entry.rateAtomic)*BigInt(entry.unit==='second'?input.maxSeconds:1)).toString();
     const requirements=await this.blocky.requirements({payTo:this.env.WIKSHI_MERCHANT_ACCOUNT,amount});
@@ -63,12 +58,11 @@ export class Engine {
     if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);
     this.blocky.envelope(payload,op.data.requirements);
     const payment=this.inspect(payload,op.data.requirements,op.id);
-    const approved=(this.env.WIKSHI_TESTNET_PAYERS||'').split(',').map(x=>x.trim()).filter(Boolean);
-    if(approved.length && !approved.includes(payment.payer))throw new ApiError('payer_not_approved_for_testnet',403);
     const claimed=this.store.atomic(()=>{
       op=this.store.get(id);if(op.state!=='awaiting_payment')return false;
       if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);
       if(this.store.db.prepare('SELECT tx FROM payments WHERE tx=?').get(payment.tx))throw new ApiError('payment_replayed',409);
+      if(!this.services().some(s=>s.id===op.data.service && s.enabled))throw new ApiError('service_unavailable',503);
       this.store.db.prepare('INSERT INTO payments VALUES(?,?)').run(payment.tx,id);
       op.state='verifying_payment';op.data.payment={...payment,payload};this.store.save(op);return true;
     });

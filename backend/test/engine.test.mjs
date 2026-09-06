@@ -23,10 +23,20 @@ function setup(options={}){
   return {engine,store,blocky,env,providers,counts:()=>({settles,dispatches})};
 }
 const quote=e=>e.quote('network.inspect',{account:'0.0.7284970'},credential,randomBytes(16).toString('hex'));
-test('testnet payer allowlist rejects unrelated wallets before settlement',async()=>{
+test('public hackathon accepts valid payers outside the former allowlist',async()=>{
   const {engine,env,counts}=setup();env.WIKSHI_TESTNET_PAYERS='0.0.7284970';const op=await quote(engine);
-  await assert.rejects(engine.pay(op.id,credential,{}),/payer_not_approved_for_testnet/);
-  assert.equal(counts().settles,0);
+  await engine.pay(op.id,credential,{});
+  assert.equal(counts().settles,1);
+});
+test('public recipients need no allowlist but inbox ownership and consent remain mandatory',async()=>{
+  const {engine,store,env}=setup();
+  Object.assign(env,{RESEND_API_KEY:'fixture',WIKSHI_EMAIL_READY:'true',WIKSHI_PRICE_EMAIL:'1',WIKSHI_TESTNET_RECIPIENTS:'old@example.com'});
+  const inboxId='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  store.putResource(inboxId,hash(credential),{id:inboxId,kind:'inbox',address:'sender@wikshi.xyz'});
+  const input={inboxId,to:'new-recipient@example.net',subject:'Public demo',text:'A consented conversation.',consent:true};
+  const op=await engine.quote('email.send',input,credential,randomBytes(16).toString('hex'));assert.equal(op.state,'awaiting_payment');
+  await assert.rejects(engine.quote('email.send',input,'stranger',randomBytes(16).toString('hex')),/inbox_not_found/);
+  await assert.rejects(engine.quote('email.send',{...input,consent:false},credential,randomBytes(16).toString('hex')),/consent_required/);
 });
 test('only confirmed payer payments grant a durable inbox; recovery backfills historical payers',async()=>{
   let confirmed=false;const {engine,store,env}=setup({confirm:async()=>confirmed});
