@@ -6,7 +6,7 @@ sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" npm ci --no-audit --no-fund
 sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" NEXT_TELEMETRY_DISABLED=1 npm run build
 test -s out/index.html
 test -s out/docs.html
-revision=$(git rev-parse HEAD)
+revision=$(sudo -u wikshi git rev-parse HEAD)
 release="/var/www/wikshi/releases/$revision"
 install -d -m 755 "$release"
 cp -a out/. "$release/"
