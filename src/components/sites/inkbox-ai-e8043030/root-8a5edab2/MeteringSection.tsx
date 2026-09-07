@@ -8,7 +8,7 @@ export function MeteringSection() {
         <div className="metering-story">
           <h2 id="metering-title">Only the time it takes.<br /><span>The rest comes back.</span></h2>
           <p className="wikshi-section-lead">Give your agent a spending limit, not an open tab. Calls and meetings are designed around measured time, with unused prepaid balance returned after the session.</p>
-          <img className="metering-art wikshi-cutout" src="/wikshi/art/metering-cutout.png" width="1254" height="894" alt="Wikshi returning a coin to a purse beside a stopwatch and receipt" loading="lazy" />
+          <img className="metering-art wikshi-cutout" src="https://wikshi-assets.vercel.app/art/metering-cutout.09aabc9d60f9.webp" width="1254" height="894" alt="Wikshi returning a coin to a purse beside a stopwatch and receipt" loading="lazy" />
         </div>
         <div className="metering-example">
           <div className="receipt-topline"><span>WIKSHI / USAGE CALCULATOR</span><span className="usdc-badge"><img src="/wikshi/protocols/USDC Token.svg" width="32" height="32" alt="" />Paid in USDC</span></div>
