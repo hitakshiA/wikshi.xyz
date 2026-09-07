@@ -8,7 +8,7 @@ body{background:#f7f4eb!important;color:#233e31}
 #integrations .wikshi-cutout{max-width:45%;object-fit:contain}
 .bg-surface h2 .text-salmon{color:#a66640}
 #memory h3 .text-rule{color:#687d5e}
-img[src$="communications-cutout.png"]{height:324px!important;object-position:center bottom}
+img[src*="/communications-cutout."]{height:324px!important;object-position:center bottom}
 [role="tablist"]{overflow-y:hidden;scrollbar-width:none}
 [role="tablist"]::-webkit-scrollbar{display:none}
 .wikshi-watermark{background-image:none!important;white-space:nowrap;font-family:var(--font-funnel);font-weight:650;font-size:180px;line-height:1;letter-spacing:-10px;color:#9aaf8d;opacity:.4;text-align:center}
@@ -27,7 +27,7 @@ a:focus-visible,button:focus-visible{outline:3px solid #ba794e;outline-offset:4p
 .wikshi-docs h3{font-weight:600;margin:20px 0 12px}
 .wikshi-docs p{margin:15px 0}.wikshi-docs li{margin:10px 0}.wikshi-docs ol{list-style:decimal;padding-left:24px}
 .wikshi-docs a{text-decoration:underline;text-underline-offset:4px}.wikshi-docs table{width:100%;font-size:13px}.wikshi-docs td,.wikshi-docs th{text-align:left;padding:12px 8px;border-bottom:1px solid #c3cfb8}
-@media(max-width:1023px){.wikshi-watermark{font-size:105px;letter-spacing:-5px}img[src$="communications-cutout.png"]{height:auto!important}main [role="tablist"]{justify-content:flex-start}}
+@media(max-width:1023px){.wikshi-watermark{font-size:105px;letter-spacing:-5px}img[src*="/communications-cutout."]{height:auto!important}main [role="tablist"]{justify-content:flex-start}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 
 /* Feedback pass: original airmail motion, protocol marks and stronger brand hierarchy. */
