@@ -37,6 +37,17 @@ export const server=createServer(async(req,res)=>{
       });
     }
     const match=/^\/chat-api\/operations\/([a-f0-9-]{36})(?:\/(pay|sponsor))?$/.exec(path);
+    const draftMatch=/^\/chat-api\/drafts\/([a-f0-9-]{36})\/prepare$/.exec(path);
+    if(req.method==='POST'&&draftMatch)return await sessions.exclusive(token,async s=>{
+      const draft=s.drafts?.get(draftMatch[1]);if(!draft)throw new SessionError('Draft not found.',404);
+      if(draft.operationId)return send(200,s.operations.get(draft.operationId));
+      const boxes=await api(s,'/v1/inboxes');
+      const inbox=boxes.inboxes?.find(b=>b.id===draft.inboxId)||(!draft.inboxId?boxes.inboxes?.[0]:null);
+      if(!inbox)throw new SessionError('Ask Wikshi to create your inbox first, then review this draft again.',409);
+      const input={inboxId:inbox.id,to:draft.to,subject:draft.subject,text:draft.text,consent:true};
+      const op=await api(s,'/v1/operations',{service:'email.send',input});
+      const stored={...op,input};s.operations.set(op.id,stored);draft.operationId=op.id;return send(200,stored);
+    });
     if(match){
       const [_,id,action]=match;
       if(!session.operations.has(id))throw new SessionError('Operation not found.',404);
