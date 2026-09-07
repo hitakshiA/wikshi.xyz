@@ -29,9 +29,53 @@ test('payer inbox survives restart; payments and credentials never change its ad
   assert.equal(store.resource(first.id,'different-auth'),null);store.close();
   assert.equal(readFileSync(path).includes(Buffer.from('Private unique body')),false);
 });
-test('inbox is included, not a second paid product; voice stays blocked without proven cap',()=>{
+test('one chat retains its inbox across wallet and sponsor payers without extra grants or provisioning',()=>{
+  const store=makeStore(),providers=new Providers(env);
+  store.bindPayer('wallet-owner','0.0.111');store.bindPayer('sponsor-owner','0.0.222');
+  const wallet=providers.provisionInbox('0.0.111','wallet-owner',store),sponsor=providers.provisionInbox('0.0.222','sponsor-owner',store);
+  store.bindPayer('one-chat','0.0.111');store.bindPayer('one-chat','0.0.222');store.bindPayer('one-chat','0.0.333');
+  assert.deepEqual(store.inboxes('one-chat').map(box=>box.id),[wallet.id]);
+  assert.equal(providers.provisionInbox('0.0.222','one-chat',store).id,wallet.id);
+  assert.equal(providers.provisionInbox('0.0.333','one-chat',store).id,wallet.id);
+  assert.equal(store.payerInbox('0.0.333'),null);
+  assert.equal(store.resource(sponsor.id,'one-chat'),null);
+  assert.equal(store.resource(wallet.id,'sponsor-owner'),null);
+  const third=providers.provisionInbox('0.0.333','different-chat',store);
+  assert.notEqual(third.id,wallet.id);
+  assert.equal(store.resource(third.id,'one-chat'),null);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM payer_inboxes').get().n,3);
+});
+test('racing explicit inbox provisions for one credential reuse the first durable record',async()=>{
+  const store=makeStore(),providers=new Providers(env);
+  store.bindPayer('one-chat','0.0.111');store.bindPayer('one-chat','0.0.222');
+  const [first,second]=await Promise.all(['0.0.111','0.0.222'].map(payer=>Promise.resolve().then(()=>providers.provisionInbox(payer,'one-chat',store))));
+  assert.equal(first.id,second.id);
+  assert.equal(store.inboxes('one-chat').length,1);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM resources').get().n,1);
+});
+test('historical multi-inbox grants remain readable and canonical ordering survives later payer binds',()=>{
+  const store=makeStore(),providers=new Providers(env);
+  const first=providers.provisionInbox('0.0.111','first-owner',store),second=providers.provisionInbox('0.0.222','second-owner',store);
+  for(const inbox of [first,second])store.db.prepare('INSERT INTO resource_grants VALUES(?,?)').run(inbox.id,'legacy-chat');
+  store.putMessage(second.id,'preserved-history',{text:'Still accessible'});
+  store.bindPayer('legacy-chat','0.0.333');
+  assert.deepEqual(store.inboxes('legacy-chat').map(box=>box.id),[first.id,second.id]);
+  assert.equal(store.primaryInbox('legacy-chat').id,first.id);
+  assert.equal(store.messages(second.id)[0].text,'Still accessible');
+  assert.equal(store.resource(second.id,'legacy-chat').id,second.id);
+});
+test('explicit inbox creation requires mail readiness and a quoted price; voice requires configuration',()=>{
   const entries=catalog({...env,WIKSHI_MERCHANT_ACCOUNT:'0.0.1',WIKSHI_MERCHANT_KEY:'fixture',WIKSHI_PRICE_INBOX:'1',WIKSHI_PRICE_PHONE_SECOND:'1',AGENTPHONE_API_KEY:'fixture'});
-  assert.equal(entries.length,14);assert.equal(entries.find(s=>s.id==='email.inbox').enabled,false);
+  assert.equal(entries.length,14);assert.equal(entries.find(s=>s.id==='email.inbox').enabled,true);
+  const ready={...env,WIKSHI_MERCHANT_ACCOUNT:'0.0.1',WIKSHI_MERCHANT_KEY:'fixture',WIKSHI_PRICE_INBOX:'1'};
+  for(const field of ['RESEND_API_KEY','RESEND_WEBHOOK_SECRET','WIKSHI_EMAIL_READY','WIKSHI_EMAIL_DOMAIN','WIKSHI_PRICE_INBOX'])assert.equal(catalog({...ready,[field]:''}).find(s=>s.id==='email.inbox').enabled,false,field);
+  assert.equal(catalog({...ready,WIKSHI_EMAIL_DOMAIN:'invalid'}).find(s=>s.id==='email.inbox').enabled,false);
+  assert.equal(catalog({...ready,WIKSHI_PRICE_INBOX:'',WIKSHI_PRICE_INBOX_HBAR:'100'}).find(s=>s.id==='email.inbox').enabled,true);
+  const fallback=catalog({...ready,WIKSHI_PRICE_INBOX:'',WIKSHI_PRICE_EMAIL:'7',WIKSHI_PRICE_EMAIL_HBAR:'1000'}).find(s=>s.id==='email.inbox');
+  assert.deepEqual(fallback.prices.map(price=>price.rateAtomic),['7','1000']);assert.equal(fallback.rateAtomic,'7');
+  const dedicated=catalog({...ready,WIKSHI_PRICE_INBOX:'9',WIKSHI_PRICE_EMAIL:'7',WIKSHI_PRICE_EMAIL_HBAR:'1000'}).find(s=>s.id==='email.inbox');
+  assert.deepEqual(dedicated.prices.map(price=>price.rateAtomic),['9','1000']);
+  assert.equal(catalog({...ready,WIKSHI_PRICE_INBOX:'invalid',WIKSHI_PRICE_EMAIL:'7'}).find(s=>s.id==='email.inbox').enabled,false);
   assert.equal(entries.find(s=>s.id==='phone.call').availabilityReason,'configuration_required');
   assert.equal(new Providers({}).provisionInbox('0.0.1','auth',makeStore()),null);
 });

@@ -60,22 +60,23 @@ export function catalog(env) {
     ['contacts.phone','Find an available business contact phone','WIKSHI_PRICE_CONTACT_PHONE',Boolean(env.QUICKENRICH_API_KEY),'request'],
     ['contacts.reverse','Look up a business profile by email','WIKSHI_PRICE_REVERSE',Boolean(env.QUICKENRICH_API_KEY),'request'],
     ['contacts.company','Find up to twenty company contacts per page','WIKSHI_PRICE_COMPANY_CONTACTS',Boolean(env.QUICKENRICH_API_KEY),'request'],
-    ['email.inbox','Durable inbox included with verified payment','WIKSHI_PRICE_INBOX',false,'request'],
+    ['email.inbox','Create your durable agent inbox','WIKSHI_PRICE_INBOX',Boolean(env.RESEND_API_KEY && env.RESEND_WEBHOOK_SECRET && env.WIKSHI_EMAIL_READY==='true' && domain(env.WIKSHI_EMAIL_DOMAIN)),'request'],
     ['email.send','Send an email from your agent inbox','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
     ['email.reply','Reply to an owned inbox message','WIKSHI_PRICE_EMAIL',Boolean(env.RESEND_API_KEY && env.WIKSHI_EMAIL_READY==='true'),'request'],
     ['phone.call','Outbound voice call with a private transcript','WIKSHI_PRICE_PHONE_SECOND',Boolean(env.AGENTPHONE_API_KEY && env.AGENTPHONE_AGENT_ID && env.WIKSHI_PHONE_ENABLED==='true'),'second'],
     ['video.meeting','Hosted video conversation with a private transcript','WIKSHI_PRICE_VIDEO_SECOND',Boolean(env.BEY_API_KEY && env.BEY_AVATAR_ID && (env.WIKSHI_VIDEO_MODE==='hosted'||env.WIKSHI_VIDEO_API_READY==='true')),'second'],
   ];
   return entries.map(([id,name,rateKey,ready,unit])=>{
-    const prices=[{...ASSETS[USDC],rateAtomic:price(rateKey)},{...ASSETS[HBAR],rateAtomic:price(`${rateKey}_HBAR`),verification:'local_tests_only_live_verification_pending'}].filter(p=>p.rateAtomic);
+    const rate=(suffix='')=>price(id==='email.inbox' && !env[`${rateKey}${suffix}`]?`WIKSHI_PRICE_EMAIL${suffix}`:`${rateKey}${suffix}`);
+    const prices=[{...ASSETS[USDC],rateAtomic:rate()},{...ASSETS[HBAR],rateAtomic:rate('_HBAR'),verification:'local_tests_only_live_verification_pending'}].filter(p=>p.rateAtomic);
     return {id,name,unit,prices,
     // Preserve legacy USDC fields. HBAR-only entries leave the legacy rate null.
-    rateAtomic:price(rateKey),currency:'USDC',decimals:6,maxSeconds:id==='phone.call'?600:unit==='second'?180:undefined,
+    rateAtomic:rate(),currency:'USDC',decimals:6,maxSeconds:id==='phone.call'?600:unit==='second'?180:undefined,
     durationEnforcement:id==='phone.call'?'none_customer_billing_ceiling_only':undefined,
     admission:id==='video.meeting'&&env.WIKSHI_VIDEO_MODE==='hosted'?'provider_hosted_not_strictly_one_use':undefined,
     enabled:Boolean(ready && prices.length && env.WIKSHI_MERCHANT_ACCOUNT && env.WIKSHI_MERCHANT_KEY),
     acceptedInputFields:serviceInputs[id],
-    availabilityReason:id==='email.inbox'?'included_with_verified_payment_use_get_inboxes':!ready?'configuration_required':!prices.length?'price_required':(!env.WIKSHI_MERCHANT_ACCOUNT || !env.WIKSHI_MERCHANT_KEY)?'payment_configuration_required':'configured',
+    availabilityReason:!ready?'configuration_required':!prices.length?'price_required':(!env.WIKSHI_MERCHANT_ACCOUNT || !env.WIKSHI_MERCHANT_KEY)?'payment_configuration_required':'configured',
     verification:id==='network.inspect'?'live_testnet_verified':'adapter_only_not_live_verified',
     rounding:unit==='second'?'ceil-second':'one-request'};});
 }

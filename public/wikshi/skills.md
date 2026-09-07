@@ -45,6 +45,7 @@ All purchases use `POST /v1/operations`; these are service IDs, not separate URL
 | `contacts.phone` | Available business phone | Same identity fields |
 | `contacts.reverse` | Business profile from email | `email` |
 | `contacts.company` | Company contacts by role | `domain`, `page`, optional `title` |
+| `email.inbox` | Create a durable inbox when email is requested and none exists | `displayName` |
 | `email.send` | Send from your agent inbox | `inboxId`, `to`, `subject`, `text`, `consent:true` |
 | `email.reply` | Reply to an owned inbound message | `inboxId`, `messageId`, `text`, `consent:true` |
 | `phone.call` | Outbound AI conversation | E.164 `phone`, `mission`, `maxSeconds`, `consent:true` |
@@ -113,11 +114,13 @@ Do not execute the transaction separately: Wikshi submits through the facilitato
 
 A timeout is not proof of failure. Query the original operation before retrying. Reuse its credential, body, idempotency key, and already-signed payment when appropriate; never sign a fresh transfer while confirmation is pending. For `execution_unknown`, stop and report that the provider may have acted. Do not resend an email or launch a duplicate call. `failed`, `expired`, `cancelled`, and `payment_rejected` are not successful outcomes.
 
-`POST /v1/operations/<id>/cancel` supports eligible pre-payment, queued, or awaiting-guest operations. It does not promise to stop a live call. Reconcile refunds separately.
+When the user cancels an unpaid request, call `POST /v1/operations/<id>/cancel` with the same credential and verify the returned `cancelled` status. Only unpaid or expired quotes without a payment claim can be cancelled. A payment already being verified, queued work, and running services cannot be cancelled through this path. Never report cancellation from conversation text alone, and never pay a cancelled quote. A confirmed cancellation releases the request so the user can move on.
 
 ## Durable inboxes
 
-A confirmed purchase provisions one persistent inbox per verified payer when mail infrastructure is available. Paying in USDC or HBAR from the same payer uses the same inbox, not a separate inbox for each currency. Read `inbox.id` and `inbox.address` from the operation, or `GET /v1/inboxes` with the same credential. **Do not purchase `email.inbox`**: it is a disabled legacy entry; the inbox is included with verified payment.
+Only create an inbox when the user requests email or an inbox. First read `GET /v1/inboxes` with the same private credential. Reuse an existing inbox. If none exists, check live availability, quote `email.inbox` with a `displayName`, and wait for approval and confirmed completion before preparing email sends. Research, contact lookups, calls, meetings and diagnostic purchases do not create an inbox. Do not buy an unrelated service to obtain email access.
+
+The explicit inbox purchase creates one persistent inbox linked to its verified payer. Read `inbox.id` and `inbox.address` from the operation or `GET /v1/inboxes`. Continue using that same inbox when the chat switches USDC/HBAR or between a wallet and sponsorship. Never create an extra mailbox for a payment-method change. Existing inboxes and messages remain available; a new credential can recover an existing payer inbox after a confirmed payment only if it does not already have an inbox. Inbox creation itself does not send email.
 
 Use the owned inbox ID for `email.send`. Read replies through:
 

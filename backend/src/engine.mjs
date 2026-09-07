@@ -3,6 +3,7 @@ import {hash} from './store.mjs';
 import {ApiError,catalog,validate,emailAddress} from './catalog.mjs';
 import {Blocky,NETWORK,ASSETS} from './payments/blocky.mjs';
 import {inspectPayment,confirmTransfer} from './payments/hedera.mjs';
+import {cancelUnpaidOperation} from './cancel.mjs';
 
 export class Engine {
   constructor({store,env,providers,blocky=new Blocky(),inspect=inspectPayment,confirm=confirmTransfer,refundSigner}) {
@@ -53,6 +54,11 @@ export class Engine {
     const now=Date.now(), id=randomUUID();
     const op={id,auth,idem,request_hash:requestHash,state:'awaiting_payment',created:now,data:{service,input:normalized,price,requirements,offers,expires:now+300000}};
     return this.store.atomic(()=>{const existing=this.store.find(auth,idem);if(existing){if(existing.request_hash!==requestHash)throw new ApiError('idempotency_conflict',409);return existing;}
+      if(service==='email.inbox'){
+        if(this.store.primaryInbox(auth))throw new ApiError('inbox_already_available_use_get_inboxes',409);
+        const active=this.store.db.prepare("SELECT id FROM operations WHERE auth=? AND state NOT IN ('completed','failed','cancelled','expired','payment_rejected')").all(auth);
+        if(active.some(row=>this.store.get(row.id).data.service==='email.inbox'))throw new ApiError('inbox_creation_in_progress',409);
+      }
       const pending=this.store.db.prepare("SELECT COUNT(*) AS n FROM operations WHERE auth=? AND state='awaiting_payment'").get(auth).n;
       if(pending>=20)throw new ApiError('too_many_pending_quotes',429);
       this.store.insert(op);return op;});
@@ -68,6 +74,7 @@ export class Engine {
     const claimed=this.store.atomic(()=>{
       op=this.store.get(id);if(op.state!=='awaiting_payment')return false;
       if(op.data.expires<Date.now())throw new ApiError('quote_expired',410);
+      if(op.data.service==='email.inbox' && this.store.primaryInbox(op.auth))throw new ApiError('inbox_already_available_use_get_inboxes',409);
       if(this.store.db.prepare('SELECT tx FROM payments WHERE tx=?').get(payment.tx))throw new ApiError('payment_replayed',409);
       if(!this.services().some(s=>s.id===op.data.service && s.enabled))throw new ApiError('service_unavailable',503);
       this.store.db.prepare('INSERT INTO payments VALUES(?,?)').run(payment.tx,id);
@@ -99,7 +106,9 @@ export class Engine {
     } catch {/* Mirror lag or outage is not payment failure. */}
   }
   attachInbox(op) {
-    const inbox=this.providers.provisionInbox?.(op.data.payment.payer,op.auth,this.store,op.data.input.displayName);
+    // A research, contact or conversation purchase can recover access to an
+    // existing payer inbox, but only email.inbox is allowed to create one.
+    const inbox=this.store.primaryInbox(op.auth);
     if(inbox && op.data.inbox?.id!==inbox.id){op.data.inbox={id:inbox.id,address:inbox.address};this.store.save(op);}
   }
   finish(op,result,seconds=undefined) {
@@ -130,6 +139,7 @@ export class Engine {
     try {
       this.attachInbox(op);
       const output=await this.providers.execute(op,this.store);
+      if(op.data.service==='email.inbox')this.attachInbox(op);
       if(output.resource){this.store.atomic(()=>{this.store.putResource(output.resource.id,op.auth,output.resource);op.data.resourceId=output.resource.id;this.store.save(op);});output.result.inboxId=output.resource.id;}
       if(output.done)this.finish(op,output.result);
       else {
@@ -168,11 +178,7 @@ export class Engine {
     }
   }
   async cancel(id,credential) {
-    const op=this.authorize(id,credential);
-    if(!['awaiting_payment','queued','awaiting_guest'].includes(op.state))throw new ApiError('cannot_cancel_current_state',409);
-    if(op.state==='awaiting_payment'){op.state='cancelled';this.store.save(op);}
-    else {this.fail(op,'cancelled');op.data.cleanupPending=Boolean(op.data.private?.agentId);this.store.save(op);}
-    return op;
+    return cancelUnpaidOperation(this.store,id,credential);
   }
   async refund(op) {
     const r=op.data.refund;if(!r || r.status==='confirmed')return;
@@ -191,7 +197,8 @@ export class Engine {
     while((pending=this.store.list(['dispatching','joining','settling_payment','verifying_payment'])).length){
       for(const op of pending){op.state=['dispatching','joining'].includes(op.state)?'execution_unknown':'confirming_payment';this.store.save(op);}
     }
-    // Upgrade previously confirmed testnet payers without asking them to pay twice.
+    // Restore access grants to existing inboxes, without creating mailboxes for
+    // historical research or conversation purchases during a restart.
     for(const row of this.store.db.prepare('SELECT id FROM operations').all()){
       const op=this.store.get(row.id);
       if(op.data.payment?.confirmed){this.store.bindPayer(op.auth,op.data.payment.payer);this.attachInbox(op);}

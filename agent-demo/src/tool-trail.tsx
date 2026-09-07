@@ -3,7 +3,7 @@ import {ToolActivity} from './cards';
 import {Presence} from './motion';
 
 export type ToolRun={id:string;name:string;status:string;durationMs?:number;summary?:string};
-const labels:Record<string,string>={list_services:'Check available services',service_instructions:'Read service instructions',prepare_operation:'Prepare a payment request',check_operation:'Retrieve results and receipt',read_inbox:'Check your inbox',read_messages:'Read incoming messages',show_email_drafts:'Prepare email drafts',revise_email_draft:'Revise your email'};
+const labels:Record<string,string>={list_services:'Check available services',service_instructions:'Read service instructions',prepare_operation:'Prepare a payment request',check_operation:'Retrieve results and receipt',cancel_operation:'Cancel unpaid request',read_inbox:'Check your inbox',read_messages:'Read incoming messages',show_email_drafts:'Prepare email drafts',revise_email_draft:'Revise your email'};
 export function ToolTrail({runs}:{runs:ToolRun[]}) {
   if(!runs.length)return null;
   const active=runs.filter(t=>t.status==='running'),failed=runs.some(t=>['failed','interrupted'].includes(t.status));

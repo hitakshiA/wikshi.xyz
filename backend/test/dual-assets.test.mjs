@@ -89,9 +89,10 @@ test('historical single-asset USDC quotes remain payable and refundable',async()
 });
 
 test('same payer owns one durable inbox across currencies and credentials',async()=>{
-  const {engine,env,store}=setup();Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'fixture'});
+  const {engine,env,store}=setup();Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'fixture',WIKSHI_PRICE_INBOX:'1',WIKSHI_PRICE_INBOX_HBAR:'100'});
   engine.providers=new Providers(env);
-  const first=await pay(engine,await quote(engine),USDC);
+  const created=await engine.quote('email.inbox',{displayName:'My agent'},credential,randomBytes(16).toString('hex'));
+  await pay(engine,created,USDC);await engine.tick();const first=store.get(created.id);
   const other=randomBytes(32).toString('base64url');const second=await pay(engine,await quote(engine,other),HBAR,other);
   assert.equal(first.data.inbox.id,second.data.inbox.id);assert.equal(store.inboxes(hash(other))[0].id,first.data.inbox.id);
 });
@@ -108,8 +109,8 @@ for(const asset of [USDC,HBAR])test(`${asset}: metered and full refunds retain a
   assert.equal(confirmations.at(-1).asset,asset);assert.equal(confirmations.at(-1).memo,`refund:${op.id}`);
   assert.equal(engine.view(store.get(op.id)).refund.currency,asset===HBAR?'HBAR':'USDC');
   engine.confirm=async()=>true;await engine.refund(store.get(op.id));assert.equal(store.get(op.id).data.refund.status,'confirmed');
-  const cancelled=await pay(engine,await quote(engine),asset);await engine.cancel(cancelled.id,credential);
-  assert.equal(store.get(cancelled.id).data.refund.amount,asset===HBAR?'1000':'7');
+  const failed=await pay(engine,await quote(engine),asset);engine.fail(failed);
+  assert.equal(store.get(failed.id).data.refund.amount,asset===HBAR?'1000':'7');
 });
 
 test('native transfer inspection rejects mixed assets, wrong memo and wrong recipient',async()=>{

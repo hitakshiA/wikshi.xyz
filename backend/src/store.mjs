@@ -51,6 +51,9 @@ export class Store {
   putResource(id, auth, data) {this.db.prepare('INSERT INTO resources VALUES(?,?,?)').run(id,auth,this.seal(data,id));}
   bindPayer(auth,payer) {
     this.db.prepare('INSERT OR IGNORE INTO verified_payers VALUES(?,?)').run(auth,payer);
+    // One chat keeps its first inbox when its payer switches between a wallet
+    // and sponsorship. Historical grants remain valid, but no new one is added.
+    if(this.primaryInbox(auth))return;
     const inbox=this.db.prepare('SELECT resource FROM payer_inboxes WHERE payer=?').get(payer);
     if(inbox)this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.resource,auth);
   }
@@ -60,9 +63,12 @@ export class Store {
   }
   createPayerInbox(payer,auth,resource) {
     return this.atomic(()=>{
+      const primary=this.primaryInbox(auth);if(primary)return primary;
       let inbox=this.payerInbox(payer);
       if(!inbox){this.putResource(resource.id,auth,resource);this.db.prepare('INSERT INTO payer_inboxes VALUES(?,?,?)').run(payer,resource.id,hash(resource.address.toLowerCase()));inbox=resource;}
-      this.db.prepare('INSERT OR IGNORE INTO resource_grants(resource,auth) SELECT ?,auth FROM verified_payers WHERE payer=?').run(inbox.id,payer);
+      for(const verified of this.db.prepare('SELECT auth FROM verified_payers WHERE payer=?').all(payer)){
+        if(!this.primaryInbox(verified.auth))this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.id,verified.auth);
+      }
       this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.id,auth);
       return inbox;
     });
@@ -83,7 +89,8 @@ export class Store {
       return inbox;
     });
   }
-  inboxes(auth) {return this.db.prepare("SELECT id,data FROM resources WHERE auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?)").all(auth,auth).map(r=>this.open(r.data,r.id)).filter(r=>r.kind==='inbox').map(r=>({id:r.id,address:r.address,displayName:r.displayName}));}
+  inboxes(auth) {return this.db.prepare("SELECT id,data FROM resources WHERE auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?) ORDER BY resources.rowid").all(auth,auth).map(r=>this.open(r.data,r.id)).filter(r=>r.kind==='inbox').map(r=>({id:r.id,address:r.address,displayName:r.displayName}));}
+  primaryInbox(auth) {const inbox=this.inboxes(auth)[0];return inbox?this.resource(inbox.id,auth):null;}
   putMessage(inbox,source,data) {
     const id=hash(`${inbox}:${source}`).slice(0,32).replace(/^(........)(....)(....)(....)(............)$/,'$1-$2-$3-$4-$5');
     this.db.prepare('INSERT OR IGNORE INTO messages VALUES(?,?,?,?,?)').run(id,inbox,source,Date.now(),this.seal({...data,id},id));return id;

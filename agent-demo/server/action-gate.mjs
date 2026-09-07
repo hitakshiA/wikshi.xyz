@@ -21,6 +21,7 @@ export function openDraftBatch(session,exceptBatchId) {
 
 export function beginActionTurn(session) {
   session.actionTurn={claimed:false};
+  session.readOnlyContinuation=false;
 }
 
 async function checkOutstanding(session,refreshOperation,exceptBatchId) {
@@ -62,6 +63,7 @@ export async function withNewAction(session,refreshOperation,create) {
 // Approved emails retain individual exact x402 payments, but form one user-
 // reviewed action group. Retrying this group may reuse its existing operations.
 export async function withBatchPreparation(session,batchId,refreshOperation,prepare) {
+  if(session.draftBatches?.get(batchId)?.cancelled)throw new SessionError('This email group was cancelled. Start a new review group if you want to send it later.',409);
   if(session.actionPreparation)throw new SessionError('Wait for the current approval request to finish.',409);
   session.actionPreparation=true;
   try {await checkOutstanding(session,refreshOperation,batchId);return await prepare();}
@@ -69,7 +71,7 @@ export async function withBatchPreparation(session,batchId,refreshOperation,prep
 }
 
 export function validateDraftInboxes(drafts,inboxes) {
-  if(!Array.isArray(inboxes)||!inboxes.length)throw new SessionError('Your inbox is included with your first verified service payment. Complete that payment before reviewing email drafts.',409);
+  if(!Array.isArray(inboxes)||!inboxes.length)throw new SessionError('Create an agent inbox using email.inbox before reviewing email drafts. Other service payments do not create an inbox.',409);
   return drafts.map(draft=>{
     const inbox=draft.inboxId?inboxes.find(box=>box.id===draft.inboxId):inboxes[0];
     if(!inbox)throw new SessionError('Every email must use an inbox belonging to this chat. Check the inbox list and correct the draft inbox before continuing.',400);
@@ -78,6 +80,7 @@ export function validateDraftInboxes(drafts,inboxes) {
 }
 
 export function assertPaymentGroupReady(session,id) {
+  if([...(session.draftBatches?.values()||[])].some(batch=>batch.cancelled&&batch.drafts.some(draft=>draft.operationId===id)))throw new SessionError('This email payment group was cancelled.',409);
   if([...(session.draftBatches?.values()||[])].some(batch=>batch.preparationIncomplete&&batch.drafts.some(draft=>draft.operationId===id)))throw new SessionError('Finish preparing the remaining email quotes before paying this batch.',409);
 }
 

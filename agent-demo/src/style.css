@@ -36,3 +36,12 @@
 .workspace-active>h2,.workspace-active>.inbox-scene{display:none}.workspace-active>.inbox-panel{margin-top:20px}.workspace-mail{padding:0;overflow:hidden}.workspace-mail .workspace-close{margin:12px 20px 0 auto;flex-shrink:0}.workspace-mail .mail-workspace{flex:1;min-height:0;height:auto}
 @media(min-width:1000px){.workspace-mail{display:flex;flex-direction:column}}
 @media(max-width:999px){.workspace-mail.workspace-open{display:flex;flex-direction:column}}
+.operation.research-operation{width:min(100%,480px);max-width:480px;margin:20px 0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;overflow:visible}
+.research-operation .research-attachment{margin:0}
+.research-operation>.receipt-disclosure{margin:8px 0 0;padding:0 4px;border:0}
+.research-operation>.receipt-disclosure>summary{min-height:36px;padding:4px 0;font-size:12px}
+.research-progress{display:flex;align-items:center;gap:16px;padding:16px 20px;border:1px solid var(--line);border-radius:16px;background:#fcfaf2;min-height:100px}
+.research-progress>.bird{width:64px;height:70px;flex-shrink:0}.research-progress>div:not(.bird){min-width:0;display:flex;flex-direction:column;gap:6px}.research-progress strong{font-size:15px;font-weight:550}.research-progress span,.research-progress small{font-size:12px;line-height:1.5;color:#56705a}.research-progress small{color:#963e2d}
+.payment-cancel{display:block;min-height:40px;margin:4px auto 0;padding:8px 12px;background:none;font-size:12px;color:#56705a;text-decoration:underline;text-underline-offset:3px}.payment-cancel:hover:not(:disabled){color:var(--forest)}
+.cancelled-request{display:flex;gap:12px;align-items:center;max-width:520px;padding:16px 0;font-size:13px;color:#56705a}.cancelled-request strong{color:var(--forest);font-weight:500}
+@media(min-width:1000px){.research-is-open{--research-pane-width:clamp(300px,32vw,720px)}.research-is-open .research-panel{width:var(--research-pane-width)}.research-is-open .conversation{--conversation-balance:var(--research-pane-width);--conversation-gutter:24px}}

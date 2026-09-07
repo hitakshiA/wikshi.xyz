@@ -19,9 +19,9 @@ export class Providers {
   mail(path,method='GET',body,idempotencyKey) {return this.request(`https://api.resend.com${path}`,{method,body,headers:{Authorization:`Bearer ${this.env.RESEND_API_KEY}`,...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})}});}
   phone(path,method='GET',body) {return this.request(`https://api.agentphone.ai/v1${path}`,{method,body,headers:{Authorization:`Bearer ${this.env.AGENTPHONE_API_KEY}`}});}
   provisionInbox(payer,auth,store,displayName='Wikshi agent') {
-    let existing=store.payerInbox(payer);
+    let existing=store.primaryInbox(auth)||store.payerInbox(payer);
     if(existing){
-      if(/^agent-[a-f0-9]{32}@/.test(existing.address)){
+      if(/^agent-[a-f0-9]{32}@/.test(existing.address) && store.payerInbox(payer)?.id===existing.id){
         const address=`hello-${existing.id.slice(0,8)}@${existing.address.split('@')[1]}`;
         if(!store.inboxForAddress(address))existing=store.renameInbox(payer,address);
       }

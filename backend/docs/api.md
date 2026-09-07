@@ -33,6 +33,7 @@ A timeout is not proof of failure. Query the original operation; do not sign ano
 | `contacts.phone` | Same identity inputs; business phone lookup |
 | `contacts.reverse` | `email`: business email to look up |
 | `contacts.company` | `domain`, `page`: integer 1-50, optional `title`: 1-200 characters; up to 20 contacts per page |
+| `email.inbox` | `displayName`: 1-100 characters; create an inbox only when email is requested and no owned inbox exists |
 | `email.send` | `inboxId`, `to`, `subject`, `text`, `consent:true`; must own inbox |
 | `email.reply` | `inboxId`, `messageId`, `text`, `consent:true`; original inbound message must belong to that inbox |
 | `phone.call` | `phone`: E.164; `mission`: 10-6000 characters; `maxSeconds`: integer 60-600 (billing ceiling, not a hangup timer); `consent:true` |
@@ -42,9 +43,11 @@ Unknown fields are rejected. No upstream URLs, custom headers or callback destin
 
 ### Durable payer inboxes
 
-One persistent inbox belongs to each independently verified Hedera testnet payer account, independent of payment currency. USDC and HBAR purchases from the same payer access the same inbox. Once email infrastructure is configured, any confirmed x402 purchase provisions it without another inbox charge. Existing confirmed payers are backfilled on startup. The operation includes an `inbox` object with its stable `id` and `address`. It is separate from the per-purchase result and receipt. Addresses do not rotate when a meeting ends, a new payment occurs, or the server restarts.
+Create an inbox only for an explicit email or inbox request. First read `GET /v1/inboxes`; reuse an existing inbox. If none exists, quote and approve `email.inbox` with a `displayName`. Only that service's confirmed, dispatched purchase provisions a new durable inbox. Research, contact lookup, phone, video and diagnostic purchases never create one, including during recovery or restart. The inbox-creation operation includes both its result and an `inbox` object with stable `id` and `address`.
 
-`email.inbox` remains a disabled legacy catalog entry: use the included inbox, not a second paid operation. Until sending DNS, receiving MX, webhook verification and transport keys are configured, the backend does not invent an operational email address.
+The inbox remains linked to its independently verified payer. A new credential can recover an existing payer inbox after a confirmed payment, but a credential that already has an inbox keeps it when switching between USDC/HBAR or between its wallet and sponsorship. Such switches never add another inbox or access grant to that chat. Existing historical inboxes, messages and access grants are preserved. Addresses do not rotate when a meeting ends, a new payment occurs, or the server restarts.
+
+`email.inbox` requires a configured quote price and ready sending DNS, receiving MX, webhook verification and transport keys. Its rate uses `WIKSHI_PRICE_INBOX` / `WIKSHI_PRICE_INBOX_HBAR` when set, otherwise the already-configured `WIKSHI_PRICE_EMAIL` rate for that same asset. The live catalog and quote show the exact rate; no currency conversion is assumed. Until mail readiness and a price are configured, the backend does not invent an operational email address. Creating an inbox does not send email; each approved `email.send` or `email.reply` is a separate service payment. One credential can have only one active inbox-creation request, even with different idempotency keys. Reuse the original operation on retries.
 
 - `GET /v1/inboxes`: list inboxes accessible to the current private credential.
 - `GET /v1/inboxes/<id>/messages`: latest 20 received/sent messages.
@@ -71,7 +74,7 @@ The hosted meeting URL is the necessary provider-facing exception; management ke
 
 Normal flow: `awaiting_payment → verifying_payment → settling_payment → confirming_payment → queued → dispatching → completed`. Phone/video add `awaiting_guest`, `joining`, `running`. Terminal/attention states include `expired`, `cancelled`, `failed`, `payment_rejected`, `execution_unknown`.
 
-`POST /v1/operations/<id>/cancel` is allowed before payment, while queued, or awaiting a guest. Paid cancellation creates a full refund liability. It does not claim to stop a live call. A restart during a provider write moves to `execution_unknown`; the write is not repeated automatically.
+`POST /v1/operations/<id>/cancel` requires the operation's private credential and atomically cancels only unpaid or expired quotes without a payment claim. It is idempotent for an already-cancelled request. Payment verification, queued work and running services return 409 without changing their state; this route does not reverse a payment or stop a call. Always verify the returned status before reporting cancellation. A restart during a provider write moves to `execution_unknown`; the write is not repeated automatically.
 
 ## Receipts and refunds
 

@@ -38,19 +38,98 @@ test('public recipients need no allowlist but inbox ownership and consent remain
   await assert.rejects(engine.quote('email.send',input,'stranger',randomBytes(16).toString('hex')),/inbox_not_found/);
   await assert.rejects(engine.quote('email.send',{...input,consent:false},credential,randomBytes(16).toString('hex')),/consent_required/);
 });
-test('only confirmed payer payments grant a durable inbox; recovery backfills historical payers',async()=>{
+test('only explicit paid inbox creation provisions mail; payment confirmation alone does not',async()=>{
   let confirmed=false;const {engine,store,env}=setup({confirm:async()=>confirmed});
-  Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture'});
+  Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture',WIKSHI_PRICE_INBOX:'1'});
   engine.providers=new Providers(env);
-  const op=await quote(engine);await engine.pay(op.id,credential,{});
+  const op=await engine.quote('email.inbox',{displayName:'My agent'},credential,randomBytes(16).toString('hex'));
+  assert.equal(store.inboxes(hash(credential)).length,0);
+  await engine.pay(op.id,credential,{});
   assert.equal(store.inboxes(hash(credential)).length,0);
   confirmed=true;await engine.reconcilePayment(store.get(op.id));
+  assert.equal(store.inboxes(hash(credential)).length,0);
+  await engine.dispatch(store.get(op.id));
   const inbox=store.inboxes(hash(credential))[0];assert.ok(inbox.address);
   assert.equal(engine.view(store.get(op.id)).inbox.id,inbox.id);
+  assert.equal(engine.view(store.get(op.id)).result.inboxId,inbox.id);
+  assert.equal(store.get(op.id).state,'completed');
+  await engine.dispatch(store.get(op.id));
+  assert.equal(store.inboxes(hash(credential)).length,1);
+  await assert.rejects(engine.quote('email.inbox',{displayName:'Duplicate'},credential,randomBytes(16).toString('hex')),/inbox_already_available/);
+  store.putMessage(inbox.id,'keep-after-recovery',{text:'Existing private mail'});
   const other=await quote(engine);other.data.payment={confirmed:true,payer:'0.0.999',tx:'historical'};other.auth='new-authorized-credential-hash';other.state='completed';
   store.db.prepare('UPDATE operations SET auth=? WHERE id=?').run(other.auth,other.id);store.save(other);
   engine.recover();assert.equal(store.inboxes(other.auth)[0].id,inbox.id);
+  assert.equal(engine.view(store.get(other.id)).inbox.id,inbox.id);
+  assert.equal(store.messages(inbox.id)[0].text,'Existing private mail');
   assert.equal(store.resource(inbox.id,'stranger'),null);
+});
+test('non-email service payments and recovery never create an inbox',async()=>{
+  const cases=[
+    ['network.inspect',{account:'0.0.7284970'}],
+    ['discovery.search',{query:'Useful businesses',limit:3}],
+    ['discovery.people',{query:'People in healthcare',limit:3}],
+    ['discovery.companies',{query:'Useful businesses',limit:3}],
+    ['discovery.contents',{urls:['https://example.com']}],
+    ['contacts.enrich',{firstName:'Ada',lastName:'Lovelace',domain:'example.com'}],
+    ['contacts.phone',{firstName:'Ada',lastName:'Lovelace',domain:'example.com'}],
+    ['contacts.reverse',{email:'ada@example.com'}],
+    ['contacts.company',{domain:'example.com',page:1}],
+    ['phone.call',{phone:'+15555550123',mission:'Ask about the requested business hours',maxSeconds:60,consent:true}],
+    ['video.meeting',{mission:'Ask about the requested project brief',questions:['What is the next step?'],maxSeconds:60,consent:true}],
+  ];
+  for(const [service,input] of cases){
+    const {engine,store,env}=setup();
+    Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture',WIKSHI_PRICE_INBOX:'1',EXA_API_KEY:'fixture',QUICKENRICH_API_KEY:'fixture',AGENTPHONE_API_KEY:'fixture',AGENTPHONE_AGENT_ID:'fixture',WIKSHI_PHONE_ENABLED:'true',BEY_API_KEY:'fixture',BEY_AVATAR_ID:'fixture',WIKSHI_VIDEO_MODE:'hosted'});
+    for(const name of ['SEARCH','CONTENTS','ENRICH','CONTACT_PHONE','REVERSE','COMPANY_CONTACTS','PHONE_SECOND','VIDEO_SECOND'])env[`WIKSHI_PRICE_${name}`]='1';
+    let creates=0;const providers=new Providers(env),provision=providers.provisionInbox.bind(providers);
+    providers.provisionInbox=(...args)=>{creates++;return provision(...args);};
+    providers.execute=async()=>({done:true,result:{status:'fixture-completed'}});engine.providers=providers;
+    const op=await engine.quote(service,input,credential,randomBytes(16).toString('hex'));
+    await engine.pay(op.id,credential,{});await engine.dispatch(store.get(op.id));engine.recover();
+    assert.equal(store.get(op.id).state,'completed',service);
+    assert.equal(creates,0,service);
+    assert.deepEqual(store.inboxes(hash(credential)),[],service);
+    assert.equal(store.payerInbox('0.0.999'),null,service);
+    assert.equal(engine.view(store.get(op.id)).inbox,undefined,service);
+    store.close();
+  }
+});
+test('a confirmed research payment recovers an existing payer inbox without provisioning another',async()=>{
+  let confirmed=false;const {engine,store,env}=setup({confirm:async()=>confirmed});
+  Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture'});
+  const providers=new Providers(env),inbox=providers.provisionInbox('0.0.999','previous-owner',store);
+  providers.provisionInbox=()=>{throw new Error('unrelated purchases must not provision');};engine.providers=providers;
+  const op=await quote(engine);await engine.pay(op.id,credential,{});
+  assert.equal(store.resource(inbox.id,hash(credential)),null);
+  confirmed=true;await engine.reconcilePayment(store.get(op.id));
+  assert.equal(store.resource(inbox.id,hash(credential)).address,inbox.address);
+  assert.equal(engine.view(store.get(op.id)).inbox.id,inbox.id);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM payer_inboxes').get().n,1);
+  assert.equal(store.resource(inbox.id,'stranger'),null);
+});
+test('concurrent explicit inbox quotes share one active creation slot and retry the original idempotently',async()=>{
+  const {engine,env}=setup();
+  Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture',WIKSHI_PRICE_EMAIL:'1'});
+  const make=idem=>engine.quote('email.inbox',{displayName:'My agent'},credential,idem);
+  const results=await Promise.allSettled([make('inbox-request-one-1'),make('inbox-request-two-2')]);
+  assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+  assert.equal(results.find(result=>result.status==='rejected').reason.code,'inbox_creation_in_progress');
+  const first=results.find(result=>result.status==='fulfilled').value;
+  assert.equal((await make(first.idem)).id,first.id);
+  await engine.cancel(first.id,credential);
+  assert.notEqual((await make('inbox-request-after-cancel')).id,first.id);
+});
+test('an inbox quote cannot charge after the chat recovers an existing inbox',async()=>{
+  const {engine,store,env,counts}=setup();
+  Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture',WIKSHI_PRICE_EMAIL:'1'});
+  const op=await engine.quote('email.inbox',{displayName:'My agent'},credential,randomBytes(16).toString('hex'));
+  const providers=new Providers(env),inbox=providers.provisionInbox('0.0.999','another-credential',store);
+  store.bindPayer(hash(credential),'0.0.999');
+  await assert.rejects(engine.pay(op.id,credential,{}),/inbox_already_available/);
+  assert.equal(counts().settles,0);
+  assert.equal(store.primaryInbox(hash(credential)).id,inbox.id);
+  assert.equal(store.get(op.id).state,'awaiting_payment');
 });
 test('quote idempotency returns same operation and rejects changed inputs',async()=>{
   const {engine}=setup(),key='unique-request-00001';
@@ -104,10 +183,10 @@ test('worker restart does not repeat provider dispatch or join',async()=>{
   const {engine,store,counts}=setup();const op=await quote(engine);op.state='dispatching';store.save(op);engine.recover();await engine.tick();
   assert.equal(store.get(op.id).state,'execution_unknown');assert.equal(counts().dispatches,0);
 });
-test('stale queued snapshot cannot dispatch a cancelled and refunded operation',async()=>{
-  const {engine,store,counts}=setup();const op=await quote(engine);await engine.pay(op.id,credential,{});
-  const stale=store.get(op.id);await engine.cancel(op.id,credential);await engine.dispatch(stale);
-  assert.equal(counts().dispatches,0);assert.equal(store.get(op.id).state,'failed');assert.equal(store.get(op.id).data.refund.amount,'10');
+test('stale queued snapshot cannot dispatch a cancelled unpaid operation',async()=>{
+  const {engine,store,counts}=setup();const op=await quote(engine);
+  const stale={...store.get(op.id),state:'queued'};await engine.cancel(op.id,credential);await engine.dispatch(stale);
+  assert.equal(counts().dispatches,0);assert.equal(store.get(op.id).state,'cancelled');assert.equal(store.get(op.id).data.refund,undefined);
 });
 test('completed video waits for stable transcript before storing original and cleaning up',async()=>{
   const {engine,store,providers}=setup();const op=await quote(engine);
