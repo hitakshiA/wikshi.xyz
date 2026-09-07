@@ -4,8 +4,9 @@ cd /opt/wikshi/agent-demo
 id wikshi-chat >/dev/null 2>&1 || useradd --system --home-dir /var/lib/wikshi-chat --shell /usr/sbin/nologin wikshi-chat
 install -d -o wikshi-chat -g wikshi-chat -m 700 /var/lib/wikshi-chat
 test -s /etc/wikshi/chat.env
+wallet_project_id=$(/opt/wikshi-node/bin/node deploy/public-config.mjs /etc/wikshi/chat-public.env)
 sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" npm ci --ignore-scripts --no-audit --no-fund
-sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" WIKSHI_CHAT_BASE=/chat/ npm run build
+sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" WIKSHI_CHAT_BASE=/chat/ VITE_WALLETCONNECT_PROJECT_ID="$wallet_project_id" npm run build
 sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" npm test
 revision=$(sudo -u wikshi git -C /opt/wikshi rev-parse HEAD)
 release="/var/www/wikshi-chat/releases/$revision"
