@@ -7,7 +7,7 @@ test -s /etc/wikshi/chat.env
 sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" npm ci --ignore-scripts --no-audit --no-fund
 sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" WIKSHI_CHAT_BASE=/chat/ npm run build
 sudo -u wikshi env PATH="/opt/wikshi-node/bin:$PATH" npm test
-revision=$(git -C /opt/wikshi rev-parse HEAD)
+revision=$(sudo -u wikshi git -C /opt/wikshi rev-parse HEAD)
 release="/var/www/wikshi-chat/releases/$revision"
 install -d -m 755 "$release"
 cp -a dist/. "$release/"
