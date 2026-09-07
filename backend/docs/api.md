@@ -11,7 +11,7 @@ Generate 32 random bytes as base64url (43 characters). Keep them secret and send
 ## Quote, pay, retrieve
 
 1. `GET /v1/services`: manifest, network, availability, rates, units and limits.
-2. `POST /v1/operations` with Authorization, JSON Content-Type, `Idempotency-Key` (16-100 URL-safe characters), and `{ "service":"network.inspect", "input":{"account":"0.0.7284970"} }`.
+2. `POST /v1/operations` with Authorization, JSON Content-Type, `Idempotency-Key` (16-100 URL-safe characters), and `{ "service":"network.inspect", "input":{"account":"0.0.123"} }` (replace the example account with the public account you intend to inspect).
 3. HTTP 402 returns an operation ID and `paymentRequired`, also base64-encoded in `PAYMENT-REQUIRED`. Quotes expire after five minutes. Same credential/idempotency key returns the same operation; changed input returns 409.
 4. Select the user's authorized currency from `accepts`, then sign that exact transfer on `hedera:testnet` using its `extra.feePayer`. For USDC use token transfers; for HBAR use native HBAR transfers denominated in tinybars, not token `0.0.0` transfers. **Set the transaction memo to `wikshi:<operation-id>` before freezing/signing.** This required Wikshi binding is advertised in `extensions.wikshi.transactionMemo`; generic clients must support it. `src/payments/hedera.mjs:signQuote` supports both assets. The API never receives the customer's private key.
 5. `POST /v1/operations/<id>/pay` with the same credential, JSON `{}`, and `PAYMENT-SIGNATURE: <base64 JSON payment payload>`. Alternatively send `{ "payment": <payload> }`. Payload: `{x402Version:2,accepted:<unchanged requirements>,payload:{transaction:<base64 signed bytes>}}`.

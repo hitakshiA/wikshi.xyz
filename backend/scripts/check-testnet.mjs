@@ -1,6 +1,6 @@
 import {Blocky, USDC} from '../src/payments/blocky.mjs';
-const id = process.argv[2] || '0.0.7284970';
-if (!/^0\.0\.[1-9]\d*$/.test(id)) throw new Error('Provide a Hedera account ID');
+const id = process.argv[2] || process.env.WIKSHI_TESTNET_PAYER;
+if(!/^0\.0\.[1-9]\d*$/.test(id||''))throw new Error('Supply a public testnet account argument or WIKSHI_TESTNET_PAYER');
 const mirror = 'https://testnet.mirrornode.hedera.com';
 async function get(path) {
   const response = await fetch(`${mirror}${path}`, {signal: AbortSignal.timeout(15000), redirect: 'error'});

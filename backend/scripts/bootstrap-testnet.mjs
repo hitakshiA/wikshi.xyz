@@ -4,6 +4,7 @@ import {mkdirSync,writeFileSync,existsSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import {createInterface} from 'node:readline';
 import {USDC} from '../src/payments/blocky.mjs';
+import {payer} from './testnet-payer.mjs';
 const path=new URL('../.runtime/',import.meta.url);
 if(existsSync(new URL('server.env',path)))throw new Error('Runtime already exists. Refusing to create another account.');
 process.stdout.write('Supply testnet payer key on stdin (not echoed).\n');
@@ -12,7 +13,6 @@ let client;
 try {
   const [line]=await (async()=>{for await(const value of lines)return [value];})();lines.close();
   const key=PrivateKey.fromStringECDSA(line.trim().replace(/^0x/,''));
-  const payer='0.0.7284970';
   const response=await fetch(`https://testnet.mirrornode.hedera.com/api/v1/accounts/${payer}`);
   const account=await response.json();
   if(account.key?.key.toLowerCase()!==key.publicKey.toStringRaw().toLowerCase())throw new Error('Key does not match requested public account');

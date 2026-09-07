@@ -7,6 +7,7 @@ import {Engine} from '../src/engine.mjs';
 import {Providers} from '../src/providers.mjs';
 import {createApi} from '../src/server.mjs';
 import {signQuote,RefundSigner} from '../src/payments/hedera.mjs';
+import {payer} from './testnet-payer.mjs';
 process.loadEnvFile(new URL('../.runtime/server.env',import.meta.url));
 console.log('Supply testnet payer key on stdin (not echoed).');
 const lines=createInterface({input:process.stdin,terminal:false});
@@ -17,10 +18,10 @@ const server=createApi(engine);await new Promise(r=>server.listen(0,'127.0.0.1',
 const origin=`http://127.0.0.1:${server.address().port}`,credential=randomBytes(32).toString('base64url');
 const headers={Authorization:`Bearer ${credential}`,'Content-Type':'application/json'};
 async function purchase(){
-  const response=await fetch(`${origin}/v1/operations`,{method:'POST',headers:{...headers,'Idempotency-Key':randomBytes(16).toString('hex')},body:JSON.stringify({service:'network.inspect',input:{account:'0.0.7284970'}})});
+  const response=await fetch(`${origin}/v1/operations`,{method:'POST',headers:{...headers,'Idempotency-Key':randomBytes(16).toString('hex')},body:JSON.stringify({service:'network.inspect',input:{account:payer}})});
   const quoted=await response.json();if(response.status!==402)throw new Error('Quote failed');
   const requirements=quoted.paymentRequired.accepts[0];if(requirements.amount!=='1')throw new Error('Refusing a test payment larger than 1 atomic USDC');
-  const payment=await signQuote('0.0.7284970',key,requirements,quoted.id);
+  const payment=await signQuote(payer,key,requirements,quoted.id);
   const paid=await fetch(`${origin}/v1/operations/${quoted.id}/pay`,{method:'POST',headers:{...headers,'PAYMENT-SIGNATURE':Buffer.from(JSON.stringify(payment)).toString('base64')},body:'{}'});
   const result=await paid.json();console.log(JSON.stringify({phase:'submitted',operation:quoted.id,status:result.status,transaction:store.get(quoted.id).data.payment?.tx}));
   for(let i=0;i<18;i++){const op=store.get(quoted.id);if(op.state==='queued')return quoted.id;if(op.state==='payment_rejected')throw new Error('Blocky rejected payment');await new Promise(r=>setTimeout(r,5000));await engine.reconcilePayment(op);}
@@ -36,7 +37,7 @@ try{
   const cancelled=await purchase();await engine.cancel(cancelled,credential);
   for(let i=0;i<18;i++){await engine.tick();const op=store.get(cancelled);if(op.data.refund?.status==='confirmed')break;await new Promise(r=>setTimeout(r,5000));}
   const refund=engine.view(engine.authorize(cancelled,credential));
-  const report={checkedAt:new Date().toISOString(),payer:'0.0.7284970',merchant:env.WIKSHI_MERCHANT_ACCOUNT,completed:done,refunded:refund,privateAccessTest:true,receiptSignatureTest:true};
+  const report={checkedAt:new Date().toISOString(),payer,merchant:env.WIKSHI_MERCHANT_ACCOUNT,completed:done,refunded:refund,privateAccessTest:true,receiptSignatureTest:true};
   writeFileSync(new URL('../.runtime/live-smoke.json',import.meta.url),JSON.stringify(report,null,2),{mode:0o600});
   console.log(JSON.stringify({phase:'refund',status:refund.refund?.status,transaction:refund.refund?.transaction,amountAtomic:refund.refund?.amountAtomic}));
   if(refund.refund?.status!=='confirmed')throw new Error('Refund awaiting reconciliation');

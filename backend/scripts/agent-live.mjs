@@ -2,16 +2,17 @@
 import {createInterface} from 'node:readline';
 import {randomBytes,verify,createPublicKey} from 'node:crypto';
 import {signQuote} from '../src/payments/hedera.mjs';
+import {payer} from './testnet-payer.mjs';
 const origin='https://api.wikshi.xyz';
 console.log('Supply testnet payer key on stdin (not echoed).');
 const lines=createInterface({input:process.stdin,terminal:false});const key=await(async()=>{for await(const line of lines)return line.trim();})();lines.close();
 const credential=randomBytes(32).toString('base64url');
 const headers={Authorization:`Bearer ${credential}`,'Content-Type':'application/json'};
 try {
-  const response=await fetch(`${origin}/v1/operations`,{method:'POST',headers:{...headers,'Idempotency-Key':randomBytes(16).toString('hex')},body:JSON.stringify({service:'network.inspect',input:{account:'0.0.7284970'}})});
+  const response=await fetch(`${origin}/v1/operations`,{method:'POST',headers:{...headers,'Idempotency-Key':randomBytes(16).toString('hex')},body:JSON.stringify({service:'network.inspect',input:{account:payer}})});
   const op=await response.json();if(response.status!==402)throw new Error('Expected real x402 challenge');
   const requirements=op.paymentRequired.accepts[0];if(requirements.amount!=='1')throw new Error('Refusing more than 1 atomic testnet USDC');
-  const payment=await signQuote('0.0.7284970',key,requirements,op.id);
+  const payment=await signQuote(payer,key,requirements,op.id);
   const paid=await fetch(`${origin}/v1/operations/${op.id}/pay`,{method:'POST',headers:{...headers,'PAYMENT-SIGNATURE':Buffer.from(JSON.stringify(payment)).toString('base64')},body:'{}'});
   const initial=await paid.json();console.log(JSON.stringify({phase:'submitted',operation:op.id,status:initial.status}));
   let done;
