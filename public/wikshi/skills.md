@@ -12,6 +12,16 @@ Live manifest: https://api.wikshi.xyz/v1/services
 
 You plan the work. Wikshi supplies research, business contacts, email, calls, and video meetings. Use Wikshi's API rather than separate provider accounts. Payments use x402 through Blocky402 on Hedera testnet, in USDC or native HBAR. Testnet tokens are not real money, but emails and phone calls reach real people. HBAR support has local test coverage; final live HBAR settlement/refund verification is pending. Do not present that path as live-verified.
 
+## First run: prepare the free testnet demo
+
+Run these checks before the first purchase. Reuse existing local setup on later runs; do not create a new wallet or retrieval credential for each request.
+
+1. Confirm you have web access and a local tool environment capable of signing Hedera transactions. Read the live manifest and API contract above. If tools or a compatible signer are unavailable, explain the missing requirement before attempting payment.
+2. Look for an explicitly configured, locally controlled Hedera **testnet** account. If none exists, guide the user through creating a dedicated account at https://portal.hedera.com/. Keep the signing key in a local secret store or protected environment configuration, never in chat, source control, or a public link. Never ask the user to paste a private key into the conversation.
+3. Ask for the payment currency and testnet spending budget if missing. For **USDC**, verify association with token `0.0.429274` and a sufficient testnet USDC balance. If association is missing, explain the transaction and obtain approval before signing it locally. Direct the user to https://faucet.circle.com/ and select **Hedera Testnet** for test USDC. For **HBAR**, obtain testnet HBAR through the Hedera Portal; native HBAR needs no token association. Keep some testnet HBAR available for account setup and network fees. Use only testnet funds.
+4. Verify the account's network, association where needed, and balances before requesting a paid operation. If the faucet requires interactive steps, let the user complete them, then check again. A faucet request is not proof that funds arrived.
+5. Create or reuse the private retrieval credential described below and save a private workflow record. Once setup is ready, continue with the user's mission without repeating onboarding. Free testnet tokens do not authorize outreach: confirm recipients and the message or call brief before contacting anyone.
+
 ## Start with the mission
 
 Establish the desired outcome, geography or company criteria, allowed recipients, preferred currency (USDC or HBAR), and testnet budget in that currency. Ask only for missing information. If both currencies are authorized, keep separate budgets; do not add their amounts or assume an exchange rate. Reading this skill does not authorize contacting anyone. Research first; present the recipients and message or call brief for confirmation before outreach unless that exact outreach is already explicitly authorized.

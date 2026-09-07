@@ -5,7 +5,6 @@ import { attributesToProps, domToReact, Element, htmlToDOM, type DOMNode, type H
 import markup from './wikshi-markup.json';
 import {CourierSky} from './CourierSky';
 import {wikshiPrompt} from '@/lib/wikshi-prompt';
-import {TestnetSetup} from '@/components/wikshi-pages/TestnetSetup';
 
 const source = htmlToDOM(markup.Hero);
 
@@ -145,7 +144,7 @@ export function Hero() {
         >{children()}</button>;
       }
       if (node.attribs.role === 'tabpanel') {
-        return <><div {...props} aria-labelledby={`quickstart-tab-${activeTab}`}>{children()}</div><TestnetSetup/></>;
+        return <div {...props} aria-labelledby={`quickstart-tab-${activeTab}`}>{children()}</div>;
       }
       const paragraphIndex = paragraphs.indexOf(node);
       if (paragraphIndex !== -1) {
