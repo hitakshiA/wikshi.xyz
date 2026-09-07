@@ -1,0 +1,9 @@
+export function serviceName(service:string):string;
+export function serviceKind(service:string):'calls'|'meetings'|'email'|'research';
+export function statusName(status:string):string;
+export function tokenAmount(value:unknown,metadata?:any):string|null;
+export function activityAmount(op:any):{label:string;value:string}|null;
+export function explorerLinks(op:any):{label:string;url:string}[];
+export function requestFields(input?:unknown):{label:string;value:string}[];
+export function resultSummary(op:any):string|null;
+export function transcriptRows(result:any):{role:string;text:string}[];

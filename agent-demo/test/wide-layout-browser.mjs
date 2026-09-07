@@ -12,7 +12,7 @@ async function checkLayout(page,width,state){
   const layout=await page.evaluate(()=>{
     const box=selector=>{const rect=document.querySelector(selector).getBoundingClientRect();return {x:rect.x,right:rect.right,width:rect.width,y:rect.y,bottom:rect.bottom};};
     const scroll=document.querySelector('.conversation-scroll');
-    return {shell:box('.chat-shell'),header:box('.chat-header'),footer:box('.chat-footer'),conversation:box('.conversation'),scroll:box('.conversation-scroll'),composer:box('.composer'),workspace:box('.workspace'),messages:box('.messages'),overflow:document.documentElement.scrollWidth>innerWidth,scrollHeight:scroll.scrollHeight,scrollClientHeight:scroll.clientHeight,viewportHeight:innerHeight};
+    return {shell:box('.chat-shell'),header:box('.chat-header'),footer:box('.chat-footer'),conversation:box('.conversation'),scroll:box('.conversation-scroll'),composer:box('.composer'),workspace:box('.workspace'),messages:box('.messages'),balance:parseFloat(getComputedStyle(scroll).paddingLeft)-parseFloat(getComputedStyle(scroll).paddingRight),overflow:document.documentElement.scrollWidth>innerWidth,scrollHeight:scroll.scrollHeight,scrollClientHeight:scroll.clientHeight,viewportHeight:innerHeight};
   });
   for(const name of ['shell','header','footer']){
     near(layout[name].x,0,`${width}px ${state} ${name} left`);
@@ -22,7 +22,9 @@ async function checkLayout(page,width,state){
   assert.equal(layout.overflow,false,`${width}px ${state} must not overflow horizontally`);
   assert(layout.composer.width<=810.5,`${width}px ${state} composer remains readable`);
   assert(layout.messages.width<=810.5,`${width}px ${state} messages remain readable`);
-  near(layout.composer.x+layout.composer.width/2,layout.conversation.x+layout.conversation.width/2,`${width}px ${state} centered composer`);
+  const expectedCenter=width>=1650?width/2:layout.conversation.x+layout.conversation.width/2+layout.balance/2;
+  near(layout.composer.x+layout.composer.width/2,expectedCenter,`${width}px ${state} centered composer`);
+  near(layout.messages.x+layout.messages.width/2,expectedCenter,`${width}px ${state} centered messages`);
   assert(layout.composer.bottom<=layout.footer.y,`${width}px ${state} composer stays above footer`);
   assert(layout.scroll.bottom<=layout.composer.y,`${width}px ${state} scroll area does not cover composer`);
   if(width>=1000){
@@ -50,6 +52,7 @@ try{
     await page.goto(base);
     await page.locator('.welcome h1').waitFor();
     await page.evaluate(()=>document.fonts.ready);
+    await page.evaluate(()=>Promise.all([...document.images].map(image=>image.decode().catch(()=>{}))));
     await checkLayout(page,width,'welcome');
     if(width===390){
       const workspaceButton=page.getByRole('button',{name:'Your workspace'});
@@ -64,6 +67,8 @@ try{
     await page.locator('#mission').fill('Compare the companies we found and explain what is worth checking next.');
     await page.getByRole('button',{name:'Send message',exact:true}).click();
     await page.locator('.message-markdown h3').last().waitFor();
+    await page.waitForFunction(()=>!document.querySelector('.composer span'));
+    await page.locator('.message-assistant .tool-activity').waitFor({state:'detached'});
     assert.equal(await page.locator('.message-markdown h3').count(),30);
     const layout=await checkLayout(page,width,'conversation');
     const composerBefore=await page.locator('.composer').boundingBox();

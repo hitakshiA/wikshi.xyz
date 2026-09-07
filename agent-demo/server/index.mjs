@@ -4,6 +4,7 @@ import {createRuntime,api,refresh} from './runtime.mjs';
 import {decideDraft,approvedDrafts} from './drafts.mjs';
 import {Sponsor} from './sponsor.mjs';
 import {beginActionTurn,withBatchPreparation,prepareEmailBatch,assertPaymentGroupReady} from './action-gate.mjs';
+import {readInboxRoute} from './inbox-routes.mjs';
 
 const sessions=new Sessions();
 const sponsor=new Sponsor();
@@ -83,7 +84,10 @@ export const server=createServer(async(req,res)=>{
         const op=await api(s,`/v1/operations/${id}/pay`,{payment:data.payment});s.operations.set(id,{...stored,...op});return send(200,s.operations.get(id));
       });
     }
-    if(req.method==='GET'&&path==='/chat-api/inboxes')return send(200,await api(session,'/v1/inboxes'));
+    if(req.method==='GET'){
+      const inboxResponse=await readInboxRoute(session,req.url,api);
+      if(inboxResponse)return send(200,inboxResponse.data);
+    }
     throw new SessionError('Not found.',404);
   }catch(e){if(res.headersSent){res.end();return;}send(e instanceof SessionError?e.status:500,{error:e instanceof SessionError?e.message:'Request could not be completed.'});}
 });

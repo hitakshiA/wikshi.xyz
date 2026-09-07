@@ -16,7 +16,7 @@
 @media(max-width:600px){.welcome>.bird{top:165px;right:0;width:100px;height:130px}.welcome>p{max-width:240px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.payment-card:hover{transform:none}}
 /* Scroll track meets the workspace divider; content retains its own gutters. */
-.conversation{--conversation-gutter:clamp(24px,5vw,90px);padding-inline:0}.conversation-scroll{padding-inline:var(--conversation-gutter)}.conversation>.composer{width:calc(100% - 2 * var(--conversation-gutter))}
+.conversation{--conversation-gutter:clamp(24px,5vw,90px);--conversation-balance:clamp(0px,calc(100vw - 1140px - 2 * var(--conversation-gutter)),330px);padding-inline:0}.conversation-scroll{padding-inline:var(--conversation-gutter);padding-inline-start:calc(var(--conversation-gutter) + var(--conversation-balance))}.conversation>.composer{width:calc(100% - 2 * var(--conversation-gutter) - var(--conversation-balance));left:calc(var(--conversation-balance) / 2)}
 .message-markdown{font-size:1rem;line-height:1.65;overflow-wrap:anywhere;margin:12px 0 16px}
 .message .message-markdown p{white-space:normal;margin:0 0 12px;font-size:inherit;line-height:inherit}
 .message-markdown>:last-child{margin-bottom:0!important}
@@ -31,3 +31,8 @@
 @media(max-width:600px){.message-markdown{font-size:.9375rem}}
 @media(max-width:1150px){.conversation{--conversation-gutter:28px}}
 @media(max-width:600px){.conversation{--conversation-gutter:18px}}
+.inbox-heading-button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:4px 0;background:none;text-align:left;font:inherit;min-height:44px}.inbox-heading-button:hover{color:#ad633b}
+.inbox-account-button{display:block;width:100%;background:none;text-align:left;padding:8px 0;overflow-wrap:anywhere}.inbox-account-button strong{margin:0 0 8px}.inbox-account-button>span{font-size:12px;text-decoration:underline;text-underline-offset:4px}
+.workspace-active>h2,.workspace-active>.inbox-scene{display:none}.workspace-active>.inbox-panel{margin-top:20px}.workspace-mail{padding:0;overflow:hidden}.workspace-mail .workspace-close{margin:12px 20px 0 auto;flex-shrink:0}.workspace-mail .mail-workspace{flex:1;min-height:0;height:auto}
+@media(min-width:1000px){.workspace-mail{display:flex;flex-direction:column}}
+@media(max-width:999px){.workspace-mail.workspace-open{display:flex;flex-direction:column}}
