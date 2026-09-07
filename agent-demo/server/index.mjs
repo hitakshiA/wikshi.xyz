@@ -5,6 +5,8 @@ import {createRuntime,api,refresh} from './runtime.mjs';
 const sessions=new Sessions();
 setInterval(()=>sessions.sweep(),30_000).unref();
 const allowedOrigin=process.env.WIKSHI_CHAT_ORIGIN||'http://127.0.0.1:5173';
+let activeTurns=0;
+const maxConcurrent=Number(process.env.WIKSHI_CHAT_CONCURRENCY||3);
 async function body(req){let size=0,parts=[];for await(const part of req){size+=part.length;if(size>65536)throw new SessionError('Request too large.',413);parts.push(part);}try{return JSON.parse(Buffer.concat(parts).toString()||'{}');}catch{throw new SessionError('Invalid request.');}}
 function bearer(req){const token=req.headers.authorization?.replace(/^Bearer /,'');if(!/^[\w-]{43}$/.test(token||''))throw new SessionError('Start a new chat.',401);return token;}
 export const server=createServer(async(req,res)=>{
@@ -13,6 +15,7 @@ export const server=createServer(async(req,res)=>{
   try{
     if(req.headers.origin && req.headers.origin!==allowedOrigin)throw new SessionError('Origin not allowed.',403);
     const path=new URL(req.url,'http://localhost').pathname;
+    if(req.method==='GET'&&path==='/chat-api/health')return send(200,{ok:!!process.env.CLINE_API_KEY,model:'cline-pass/glm-5.3'});
     if(req.method==='POST'&&path==='/chat-api/sessions'){const s=sessions.create();return send(201,{token:s.token,id:s.id,model:'cline-pass/glm-5.3',sponsorship:{hbar:10,usdc:0.5,available:false}});}
     const token=bearer(req),session=sessions.get(token);
     if(req.method==='POST'&&path==='/chat-api/heartbeat')return send(200,{ok:true});
@@ -20,13 +23,17 @@ export const server=createServer(async(req,res)=>{
     if(req.method==='POST'&&path==='/chat-api/message'){
       const data=await body(req);if(typeof data.message!=='string'||!data.message.trim()||data.message.length>8000)throw new SessionError('Write a message under 8,000 characters.');
       return await sessions.exclusive(token,async s=>{
+        if(activeTurns>=maxConcurrent)throw new SessionError('All agents are busy. Please try again shortly.',503);
+        if((s.turns||0)>=40)throw new SessionError('This demo chat has reached its message limit. Start a new chat.',429);
         const emit=event=>{if(!res.destroyed)res.write(JSON.stringify(event)+'\n');};
         // An emit indirection keeps follow-up turns on their own response stream.
         s.emit=emit;s.agent??=createRuntime(s,event=>s.emit?.(event));
+        activeTurns++;s.turns=(s.turns||0)+1;
+        const timeout=setTimeout(()=>s.agent.abort('Response time limit'),120_000);
         res.writeHead(200,{'Content-Type':'application/x-ndjson','X-Accel-Buffering':'no'});
         const onClose=()=>{if(!res.writableEnded)s.agent.abort('Connection closed');};res.on('close',onClose);
         try{const result=await s.agent.run(data.message);if(result.status==='failed')emit({type:'error',message:'The agent could not finish this request. Please try again.'});emit({type:'done'});}catch{emit({type:'error',message:'The agent could not connect. Your message has not triggered a payment.'});}
-        finally{s.emit=null;res.end();res.off('close',onClose);}
+        finally{clearTimeout(timeout);activeTurns--;s.emit=null;res.end();res.off('close',onClose);}
       });
     }
     const match=/^\/chat-api\/operations\/([a-f0-9-]{36})(?:\/(pay|sponsor))?$/.exec(path);
