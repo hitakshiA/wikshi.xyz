@@ -22,3 +22,8 @@ export function updateToolRun(runs,event) {
   const next={...old,id,name:event.name,status:event.status,durationMs:event.durationMs,summary:event.summary};
   return old?runs.map(t=>t.id===id?next:t):[...runs,next];
 }
+
+export function appendAssistantText(text,event) {
+  if(event.type==='text_boundary')return text.trim()?text.trimEnd()+'\n\n':text;
+  return event.type==='text'?text+event.text:text;
+}

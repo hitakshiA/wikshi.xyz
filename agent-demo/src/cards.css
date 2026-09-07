@@ -31,7 +31,53 @@
 .tool-trail li p{font-size:12px;color:#56705a;margin:6px 0 0}.tool-trail li p:empty{display:none}
 .tool-trail li[data-status=failed] span,.tool-trail li[data-status=interrupted] span{color:#9a512e}
 .tool-trail .tool-activity{margin:0;max-width:100%;padding:4px 0}.tool-trail .tool-activity>.bird{width:64px;height:72px}
-.streaming-text:after{content:'';display:inline-block;width:5px;height:14px;margin-left:5px;border-radius:3px;background:#a86238;vertical-align:baseline;animation:pulse 1.3s ease-in-out infinite}
 @keyframes surface-arrive{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
 @keyframes surface-leave{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-4px)}}
-@media(prefers-reduced-motion:reduce){.presence,.message,.draft-batch,.operation,.tool-trail ol,.tool-trail li,.tool-dot.tool-running:after,.streaming-text:after{animation:none!important}.tool-chevron{transition:none}}
+@media(prefers-reduced-motion:reduce){.presence,.message,.draft-batch,.operation,.tool-trail ol,.tool-trail li,.tool-dot.tool-running:after{animation:none!important}.tool-chevron{transition:none}}
+
+/* Payment is one compact action surface, not a card nested in a second card. */
+.operation.op-payment,.operation.email-batch-payment{max-width:520px;margin:20px 0;border:0;border-radius:0;background:none;box-shadow:none;overflow:visible}
+.payment-wrap{width:100%;max-width:520px;padding:0;container-type:inline-size}
+.payment-wrap .payment-surface{padding:4px 0 10px}
+.payment-wrap .payment-card{min-height:0;max-width:none;margin:0;padding:18px 20px;border-radius:18px;box-shadow:0 10px 24px -14px #233e3140}
+.payment-wrap .payment-top{gap:9px;min-height:22px;font-size:11px}
+.payment-wrap .payment-top>span:last-child{font-size:9px;letter-spacing:1px}
+.payment-wrap .payment-card .x402-mark{width:40px;height:22px}
+.payment-wrap .payment-card>.bird{width:90px;height:95px;right:15px;top:40px;opacity:1}
+.payment-wrap .payment-card .card-caption{margin:12px 100px 3px 0;font-size:12px;line-height:1.5;color:#d8e0ca}
+.payment-wrap .payment-card h3{font-size:30px;line-height:1.2;letter-spacing:-.8px;max-width:calc(100% - 86px);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.payment-wrap .payment-card h3 span{font-size:12px;letter-spacing:0}
+.payment-card-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;position:relative;z-index:1}
+.payment-wrap .currency-switch{margin:0;gap:6px;flex:none}
+.payment-wrap .currency-switch button{min-height:40px;padding:8px 12px;font-size:11px;gap:6px}
+.payment-wrap .currency-switch img{width:18px;height:18px}
+.payment-recipient{font-size:10px;line-height:1.4;color:#d8e0ca;overflow-wrap:anywhere;text-align:right}
+.payment-wrap .payment-brief-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;margin:0 0 4px;line-height:1.5;font-size:12px;color:#45634c}
+.payment-wrap .payment-brief-summary.has-recipient{display:block;overflow:visible}
+.payment-wrap .approval-brief{margin:0;font-size:12px}
+.payment-wrap .approval-brief>summary{padding:11px 0;min-height:40px;line-height:1.5}
+.payment-wrap .approval-brief .data-details{margin:0 0 10px}
+.payment-wrap .approval-brief>p{margin:0 0 12px;line-height:1.6}
+.payment-wrap .wallet-choice{margin:0 0 10px;font-size:12px;border-top:0}
+.payment-wrap .wallet-choice>summary{padding:10px 0;min-height:40px;line-height:1.5}
+.payment-wrap .wallet-choice-body{padding:6px 0 12px}
+.payment-wrap .payment-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch;gap:10px}
+.payment-wrap .payment-actions button{min-height:44px;padding:11px 14px;font-size:12px;line-height:1.5;white-space:normal}
+.payment-wrap .sponsor-button{border:1px solid #9cad90;border-radius:26px;background:transparent;color:var(--forest)}
+.payment-wrap .sponsor-button:hover:not(:disabled){background:var(--sage)}
+.payment-wrap .faucet-links{margin:10px 0 0;line-height:1.6;font-size:11px;text-align:left}
+.payment-wrap .faucet-links a{margin-left:10px}
+.draft-batch .batch-preparation-notice{margin:16px 0 0;font-size:13px;line-height:1.6;color:#8c512f}
+.expired-request{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;max-width:520px;margin:20px 0;padding-block:8px;border-bottom:1px solid var(--line);font-size:12px;color:#56705a}
+.expired-request .text-button{min-height:44px;padding:10px 0}
+@container(max-width:360px){
+  .payment-wrap .payment-card{padding:16px}
+  .payment-wrap .payment-card>.bird{width:72px;height:85px;right:8px;top:39px}
+  .payment-wrap .payment-card .card-caption{margin-right:75px}
+  .payment-wrap .payment-card h3{font-size:28px;max-width:calc(100% - 64px)}
+  .payment-wrap .payment-top>span:last-child{font-size:8px;letter-spacing:.7px}
+  .payment-wrap .currency-switch button{padding:8px 10px;min-height:44px}
+  .payment-card-controls{gap:8px}
+  .payment-wrap .payment-actions{gap:8px}
+  .payment-wrap .payment-actions button{padding-inline:10px}
+}

@@ -39,13 +39,13 @@ try{
     if(mode==='wallet'){
       // A rejected signature must not submit any API payment and must be retryable.
       await page.evaluate(()=>{window.__reject=true});
-      await page.getByRole('button',{name:`Approve & sign ${currency}`}).click();
+      await page.getByRole('button',{name:'Pay with wallet ↗',exact:true}).click();
       await page.getByRole('alert').filter({hasText:'Wallet request rejected.'}).waitFor();
       assert.equal(requests.length,0);
       await page.evaluate(()=>{window.__reject=false});
-      await page.getByRole('button',{name:`Approve & sign ${currency}`}).click();
+      await page.getByRole('button',{name:'Pay with wallet ↗',exact:true}).click();
     }else{
-      await page.getByRole('button',{name:'Let Wikshi sponsor this',exact:true}).click();
+      await page.getByRole('button',{name:'Sponsor this',exact:true}).click();
       assert.equal(requests.length,0);
       await page.getByRole('button',{name:'Approve sponsored payment',exact:true}).click();
     }
