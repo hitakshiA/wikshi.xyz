@@ -9,3 +9,9 @@
 @media(prefers-reduced-motion:reduce){.page-button{transition:none}.page-button:hover{transform:none}}
 .wikshi-meetings{padding-bottom:72px}
 .mission-prompt{white-space:pre-line;font-size:14px;line-height:1.7}.workflow-brief details{margin-bottom:20px}.mission-source{display:inline-block;margin-top:18px;font-size:12px;text-decoration:underline;text-underline-offset:4px;color:#53664f}
+.testnet-setup { margin: 20px auto; padding: 16px 20px; max-width: 900px; color: #233e31; background: #f7f4eb; border: 1px solid #bfcbb1; border-radius: 16px; text-align: left; font-size: 1rem; line-height: 1.6; }
+.testnet-setup summary { cursor: pointer; font-weight: 600; }
+.testnet-setup a { text-decoration: underline; text-underline-offset: 3px; }
+.testnet-setup .page-steps { margin-top: 20px; }
+.testnet-setup p { max-width: 70ch; }
+.testnet-setup summary:focus-visible, .testnet-setup a:focus-visible { outline: 2px solid #ad633b; outline-offset: 4px; }

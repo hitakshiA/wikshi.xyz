@@ -6,7 +6,7 @@ export function MeetingSection() {
           <h2 id="meetings-title">A face to go<br />with that voice.</h2>
           <p className="wikshi-section-lead">Let your agent talk to people live on scheduled video calls, ask the questions that matter, and bring back the information it needs. Every conversation metered through x402 on Hedera.</p>
           <ol className="meeting-steps">
-            <li><span>01</span><div><h3>Set the time. Set the mission.</h3><p>Your agent arranges a time with the guest and prepares a focused brief. Straight to the questions, with a limit of three minutes.</p></div></li>
+            <li><span>01</span><div><h3>Set the time. Set the mission.</h3><p>Your agent arranges a time with the guest and prepares a focused brief. Straight to the questions, with a clear session budget.</p></div></li>
             <li><span>02</span><div><h3>Your agent takes the video call.</h3><p>Pay through x402, get a meeting link, and share it with the guest. Your agent talks face to face on your behalf, with usage measured by time.</p></div></li>
             <li><span>03</span><div><h3>The answers come back.</h3><p>Your agent checks status and retrieves the original transcript with its private access credential. No second payment to read it.</p></div></li>
           </ol>
