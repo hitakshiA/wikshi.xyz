@@ -118,6 +118,7 @@ export function Hero() {
       if (node.name === 'script') return <></>;
       const props = attributesToProps(node.attribs);
       const children = () => domToReact(node.children as DOMNode[], options);
+      if (node.name === 'a' && node.attribs.href === '/#quickstart-panel') return <a {...props} href="/chat/">{children()}</a>;
       if (node.attribs.role === 'tablist') {
         return <div {...props} ref={marqueeRef} className={`${node.attribs.class} quickstart-marquee`}>
           <div className="quickstart-marquee-track" role="presentation">

@@ -61,7 +61,7 @@ export function Navigation() {
     if(node.parent instanceof Element && node.parent.name==='header') return <div {...props} style={{maxWidth:expanded+(collapsed-expanded)*progress,willChange:progress>.02?'max-width':'auto'}}>{children()}</div>;
     if(node.attribs.class?.includes('home-nav-shell')) return <div {...props} style={shellStyle}>{children()}</div>;
     if(node.attribs['aria-label']==='Open menu') return <button {...props} ref={opener} aria-expanded={open} aria-controls="mobile-navigation" onClick={()=>{setDrag(0);setOpen(true);}}>{children()}</button>;
-    if(node.name==='a' && node.attribs.href==='/#quickstart-panel') return <a {...props} style={{paddingInline:12-4*progress}}>{children()}</a>;
+    if(node.name==='a' && node.attribs.href==='/#quickstart-panel') return <a {...props} href="/chat/" style={{paddingInline:12-4*progress}}>{children()}</a>;
   }};
   const menuOptions:HTMLReactParserOptions={replace(node){
     if(!(node instanceof Element)) return;
@@ -79,7 +79,7 @@ export function Navigation() {
       const label=node.attribs['aria-label'] || node.children.map(n=>n.type==='text'?n.data:'').join('');
       return <button {...props} onClick={()=>{
         if(label==='Close'){setOpen(false);return;}
-        const href=label==='Workflow skill'?'/wikshi/skills.md':label==='Overview'?'/docs':'/#quickstart-panel';
+        const href=label==='Workflow skill'?'/wikshi/skills.md':label==='Overview'?'/docs':'/chat/';
         setOpen(false);window.location.assign(href);
       }}>{label === 'Workflow skill' ? <>Workflow skill <span aria-hidden="true">↗</span></> : children()}</button>;
     }
