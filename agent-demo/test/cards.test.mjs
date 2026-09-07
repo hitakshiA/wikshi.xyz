@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {atomic,rowsOf,safeUrl,scanLink} from '../src/card-data.mjs';
-import {createDraftBatch} from '../server/drafts.mjs';
+import {createDraftBatch,decideDraft,approvedDrafts,reviseDraft} from '../server/drafts.mjs';
 
 test('research preserves all 100 records, including nested results',()=>{
   const rows=Array.from({length:100},(_,id)=>({id,name:`Company ${id}`}));
@@ -26,4 +26,17 @@ test('draft batches enforce four, preserve recipients, isolate sessions',()=>{
   assert.equal(other.drafts.has(first.drafts[0].id),false);
   assert.throws(()=>createDraftBatch(session,Array(5).fill(draft)));
   assert.throws(()=>createDraftBatch(session,[{...draft,subject:'Hello\nBcc: someone'}]));
+});
+test('all drafts must be reviewed; only approvals proceed; revisions need fresh approval',()=>{
+  const s={},d={to:'guest@example.com',subject:'Hello',text:'A note'};
+  const b=createDraftBatch(s,[d,d,d]);
+  decideDraft(s,b.drafts[0].id,'approved');decideDraft(s,b.drafts[1].id,'denied');
+  assert.throws(()=>approvedDrafts(s,b.id));
+  decideDraft(s,b.drafts[2].id,'changes_requested','Shorten it');
+  assert.throws(()=>decideDraft(s,b.drafts[2].id,'approved'));
+  reviseDraft(s,b.drafts[2].id,'Shorter hello','A shorter note');
+  assert.equal(b.drafts[2].decision,'pending');assert.equal(b.drafts[0].decision,'approved');
+  decideDraft(s,b.drafts[2].id,'approved');assert.equal(approvedDrafts(s,b.id).length,2);
+  assert.equal(approvedDrafts(s,b.id).some(x=>x.id===b.drafts[1].id),false);
+  b.drafts[0].operationId='quoted-operation';assert.throws(()=>decideDraft(s,b.drafts[1].id,'approved'));
 });

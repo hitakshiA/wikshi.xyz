@@ -1,6 +1,7 @@
 import {createServer} from 'node:http';
 import {Sessions,SessionError} from './sessions.mjs';
 import {createRuntime,api,refresh} from './runtime.mjs';
+import {decideDraft,approvedDrafts} from './drafts.mjs';
 
 const sessions=new Sessions();
 setInterval(()=>sessions.sweep(),30_000).unref();
@@ -31,22 +32,30 @@ export const server=createServer(async(req,res)=>{
         activeTurns++;s.turns=(s.turns||0)+1;
         const timeout=setTimeout(()=>s.agent.abort('Response time limit'),120_000);
         res.writeHead(200,{'Content-Type':'application/x-ndjson','X-Accel-Buffering':'no'});
+        res.flushHeaders();
+        const keepAlive=setInterval(()=>emit({type:'heartbeat'}),15_000);
         const onClose=()=>{if(!res.writableEnded)s.agent.abort('Connection closed');};res.on('close',onClose);
         try{const result=await s.agent.run(data.message);if(result.status==='failed')emit({type:'error',message:'The agent could not finish this request. Please try again.'});emit({type:'done'});}catch{emit({type:'error',message:'The agent could not connect. Your message has not triggered a payment.'});}
-        finally{clearTimeout(timeout);activeTurns--;s.emit=null;res.end();res.off('close',onClose);}
+        finally{clearTimeout(timeout);clearInterval(keepAlive);activeTurns--;s.emit=null;res.end();res.off('close',onClose);}
       });
     }
     const match=/^\/chat-api\/operations\/([a-f0-9-]{36})(?:\/(pay|sponsor))?$/.exec(path);
-    const draftMatch=/^\/chat-api\/drafts\/([a-f0-9-]{36})\/prepare$/.exec(path);
+    const decisionMatch=/^\/chat-api\/drafts\/([a-f0-9-]{36})\/decision$/.exec(path);
+    if(req.method==='POST'&&decisionMatch)return await sessions.exclusive(token,async s=>{const data=await body(req);return send(200,decideDraft(s,decisionMatch[1],data.decision,data.feedback));});
+    const draftMatch=/^\/chat-api\/draft-batches\/([a-f0-9-]{36})\/prepare$/.exec(path);
     if(req.method==='POST'&&draftMatch)return await sessions.exclusive(token,async s=>{
-      const draft=s.drafts?.get(draftMatch[1]);if(!draft)throw new SessionError('Draft not found.',404);
-      if(draft.operationId)return send(200,s.operations.get(draft.operationId));
+      const drafts=approvedDrafts(s,draftMatch[1]);
       const boxes=await api(s,'/v1/inboxes');
+      const prepared=[];
+      for(const draft of drafts){
+      if(draft.operationId){prepared.push(s.operations.get(draft.operationId));continue;}
       const inbox=boxes.inboxes?.find(b=>b.id===draft.inboxId)||(!draft.inboxId?boxes.inboxes?.[0]:null);
-      if(!inbox)throw new SessionError('Ask Wikshi to create your inbox first, then review this draft again.',409);
+      if(!inbox)throw new SessionError('Your inbox is included with your first verified service payment. Complete that payment, then return to these approved emails.',409);
       const input={inboxId:inbox.id,to:draft.to,subject:draft.subject,text:draft.text,consent:true};
       const op=await api(s,'/v1/operations',{service:'email.send',input});
-      const stored={...op,input};s.operations.set(op.id,stored);draft.operationId=op.id;return send(200,stored);
+      const stored={...op,input};s.operations.set(op.id,stored);draft.operationId=op.id;prepared.push(stored);
+      }
+      return send(200,{batch:s.draftBatches.get(draftMatch[1]),operations:prepared});
     });
     if(match){
       const [_,id,action]=match;

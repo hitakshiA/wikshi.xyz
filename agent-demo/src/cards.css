@@ -3,3 +3,29 @@
 @media(max-width:600px){.draft-grid{grid-template-columns:1fr}.card-header{padding:18px 18px 0}.card-title{font-size:23px;padding:12px 18px 18px}.tactile-card .operation-body{padding:0 16px 20px}.call-scene{gap:12px;padding:12px}.call-scene>.bird{width:78px;height:105px}.payment-card>.bird{width:85px;right:0;opacity:.65}.payment-card{padding:20px}.paper-receipt{padding:22px 18px 30px}.research-results header{align-items:flex-start;flex-direction:column}.data-details>div{grid-template-columns:1fr;gap:6px}.sent-letter>.bird{width:72px}}
 @media(prefers-reduced-motion:reduce){.tactile-card *,.tool-activity *,.draft-letter{animation:none!important;transition:none!important}.draft-letter:hover,.payment-card:hover{transform:none}}
 .tactile-card,.payment-card{overflow:clip}
+.payment-surface{perspective:1000px;padding:5px 0 10px;--rx:0deg;--ry:0deg;--press:1}
+.payment-surface .payment-card,.payment-surface .payment-card:hover{transform:rotateX(var(--rx)) rotateY(var(--ry)) scale(var(--press));transition:transform 100ms cubic-bezier(.25,1,.5,1),box-shadow 180ms;transform-origin:center}
+.payment-surface[data-pressed=true] .payment-card{box-shadow:0 4px 12px #233e3126}
+.draft-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:22px}.draft-actions button{padding:9px 12px;border-radius:18px;font-size:12px;background:none;border:1px solid var(--line);min-height:36px}.draft-actions .draft-approve{background:var(--forest);color:var(--cream);border-color:var(--forest)}.draft-actions .draft-rewrite{border-color:transparent;padding-inline:2px;text-decoration:underline;text-underline-offset:4px}.draft-denied{background:#efeee5}.draft-approved{border-color:#7d9273}.draft-feedback{display:grid;gap:10px;margin-top:18px;font-size:12px}.draft-feedback textarea{font:inherit;padding:12px;min-height:85px;width:100%;border:1px solid var(--line);border-radius:12px;background:var(--cream);resize:vertical}.draft-feedback .primary{justify-self:start}.batch-review-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 0;font-size:12px;color:#56705a}.batch-review-footer strong{font-weight:500}.batch-review-footer .primary{font-size:12px}.call-refresh{display:inline-flex;align-items:center;border:1px solid var(--line);background:#eff1e6;border-radius:22px;font-size:12px;padding:10px 16px;margin-top:18px;transition:background 180ms}.call-refresh:hover{background:#dfe6d4}
+@media(max-width:600px){.batch-review-footer{align-items:flex-start;flex-direction:column}}
+@media(prefers-reduced-motion:reduce){.payment-surface .payment-card,.payment-surface .payment-card:hover{transform:none!important;transition:none!important}}
+.presence{animation:surface-arrive 240ms cubic-bezier(.16,1,.3,1) both}
+.presence[data-leaving]{animation:surface-leave 160ms ease-in both;pointer-events:none}
+.message,.draft-batch,.operation{animation:surface-arrive 280ms cubic-bezier(.16,1,.3,1) both}
+.tool-trail{margin:12px 0 20px;color:var(--forest)}
+.tool-trail>details>summary{display:flex;align-items:center;gap:10px;width:fit-content;font-size:12px;color:#56705a;list-style:none;padding:8px 0}
+.tool-trail summary::-webkit-details-marker{display:none}
+.tool-chevron{transition:transform 180ms ease-out}.tool-trail details[open] .tool-chevron{transform:rotate(180deg)}
+.tool-dot{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--sage);font-size:11px}
+.tool-dot.tool-running:after{content:'';width:6px;height:6px;border-radius:50%;background:#77916b;animation:pulse 1.8s ease-in-out infinite}
+.tool-trail ol{list-style:none;padding:8px 0;margin:0;animation:surface-arrive 180ms ease-out}
+.tool-trail li{padding:12px 0;border-bottom:1px solid var(--line);animation:surface-arrive 220ms ease-out}
+.tool-trail li>div{display:flex;align-items:baseline;justify-content:space-between;gap:16px;font-size:12px}
+.tool-trail li strong{font-weight:500}.tool-trail li span{font-size:11px;color:#56705a;white-space:nowrap}
+.tool-trail li p{font-size:12px;color:#56705a;margin:6px 0 0}.tool-trail li p:empty{display:none}
+.tool-trail li[data-status=failed] span,.tool-trail li[data-status=interrupted] span{color:#9a512e}
+.tool-trail .tool-activity{margin:0;max-width:100%;padding:4px 0}.tool-trail .tool-activity>.bird{width:64px;height:72px}
+.streaming-text:after{content:'';display:inline-block;width:5px;height:14px;margin-left:5px;border-radius:3px;background:#a86238;vertical-align:baseline;animation:pulse 1.3s ease-in-out infinite}
+@keyframes surface-arrive{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+@keyframes surface-leave{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-4px)}}
+@media(prefers-reduced-motion:reduce){.presence,.message,.draft-batch,.operation,.tool-trail ol,.tool-trail li,.tool-dot.tool-running:after,.streaming-text:after{animation:none!important}.tool-chevron{transition:none}}
