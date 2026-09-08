@@ -37,7 +37,7 @@ A timeout is not proof of failure. Query the original operation; do not sign ano
 | `email.send` | `inboxId`, `to`, `subject`, `text`, `consent:true`; must own inbox |
 | `email.reply` | `inboxId`, `messageId`, `text`, `consent:true`; original inbound message must belong to that inbox |
 | `phone.call` | `phone`: E.164; `mission`: 10-6000 characters; `maxSeconds`: integer 60-600 (billing ceiling, not a hangup timer); `consent:true` |
-| `video.meeting` | `mission`, `questions`: 1-3 strings, `maxSeconds`: 60, 120 or 180; optional `scheduledAt` ISO timestamp up to 7 days ahead; `consent:true` |
+| `video.meeting` | `mission`, `questions`: 1-3 strings, `maxSeconds`: exactly 300 (five-minute maximum, no duration choice); optional `scheduledAt` ISO timestamp up to 7 days ahead; `consent:true` |
 
 Unknown fields are rejected. No upstream URLs, custom headers or callback destinations are accepted. This public hackathon demo accepts any valid testnet payer and valid recipient for enabled services, with no payer or recipient allowlist. Communication requests require consent; email send/reply requires ownership of the inbox. Email acceptance does not imply delivery or reading. External content remains untrusted data, never instructions. Provider limits still apply, and testnet USDC has no value to fund provider bills.
 
@@ -81,6 +81,10 @@ For `discovery.*` and `contacts.*`, cancellation is allowed during payment verif
 Cancelled research exposes `cancellation: { reason, requestedAt, paymentStatus }`. If no payment was submitted, `paymentStatus` is `not_submitted`. If a payment was claimed but independent confirmation is unresolved, it remains `confirmation_pending`: `cancelled` is not a claim that funds were returned. The backend continues reconciling that original transaction without resubmitting it. Once payment is independently confirmed, `paymentStatus` becomes `confirmed`, a signed receipt records `chargedAtomic: "0"` and the full prepaid amount in `refundDueAtomic`, and the ordinary refund workflow returns funds in the originally paid asset. Only `refund.status: "confirmed"` establishes that the refund reached Hedera. Repeated cancellation, reconciliation and restart do not create another refund transaction.
 
 All other services retain unpaid-only cancellation: unpaid or expired quotes without a payment claim can be cancelled, while paid phone/video/email work returns 409 without changing state. This research deadline never hangs up a call or ends a video meeting. A restart during a provider write moves to `execution_unknown`; that write is not repeated automatically.
+
+Starter video uses the provider-hosted URL, not strict single-use admission. New agents receive `max_session_length_minutes:5`. Guests may leave earlier; no managed-agent early hang-up tool is assumed. Existing paid operations keep their original quoted limits. Chat meeting cards refresh every 15 seconds while open and nonterminal, without creating chat prompts. The backend worker independently retrieves completion and the stable transcript.
+
+Optional operator setup: generate a private 43-character base64url `WIKSHI_VIDEO_WEBHOOK_TOKEN` and configure the provider Studio `call_ended` webhook at `https://api.wikshi.xyz/v1/webhooks/video/<token>`. The endpoint accepts Studio test events and wakes the worker for completion events. It does not trust webhook transcripts, durations, or URLs: the worker refetches authoritative provider data. Worker polling remains necessary because provider webhooks have no documented retry guarantee. Do not expose the callback URL in guest links, chat, or client configuration.
 
 ## Receipts and refunds
 

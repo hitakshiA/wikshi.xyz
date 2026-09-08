@@ -78,7 +78,8 @@ export function createRuntime(session,emit) {
   const prepareTurn=async context=>{
     const messages=toCore(context.messages);
     const result=await pipeline({...context,messages,apiMessages:messages,conversationId:session.id,parentAgentId:null,abortSignal:context.signal,systemPrompt:context.systemPrompt||''});
-    return {...(result?{...result,messages:fromCore(result.messages)}:{}),systemPrompt:`${approvalPolicy}\n\n${cancellationPolicy}\n\n${result?.systemPrompt??context.systemPrompt??''}`};
+    const meetingPolicy='New video meetings always use maxSeconds:300: up to five minutes, with no duration selector or ten-minute option. Use the supported hosted link returned by the service. Do not promise white-label or strictly single-use admission. The provider enforces the session cap; the guest may leave earlier. No supported managed-agent hang-up tool is available, so never claim the AI disconnected a meeting merely because it said goodbye. Meeting cards refresh status automatically; transcripts appear when verified. Invitation email still requires review and its own payment, and creating an inbox is a separate approved operation when needed.';
+    return {...(result?{...result,messages:fromCore(result.messages)}:{}),systemPrompt:`${approvalPolicy}\n\n${cancellationPolicy}\n\n${meetingPolicy}\n\n${result?.systemPrompt??context.systemPrompt??''}`};
   };
   const connection=process.env.CLINE_API_KEY?{providerId:'openai-compatible',baseUrl:'https://api.cline.bot/api/v1'}:{providerId:'cline-pass'};
   const agent=new Agent({...connection,modelId,apiKey:key,maxIterations:12,tools,prepareTurn,

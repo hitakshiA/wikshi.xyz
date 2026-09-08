@@ -22,7 +22,7 @@ test('paid lookups stay in the card until a terminal outcome',()=>{
   }
 });
 test('guest invitations do not keep polling while waiting for a person',()=>{
-  assert(!shouldPoll({service:'video.meeting',status:'awaiting_guest'}));
+  assert(shouldPoll({service:'video.meeting',status:'awaiting_guest'}));
   assert(readyToSummarize({service:'video.meeting',status:'awaiting_guest'}));
   assert(!readyToSummarize(undefined));
 });

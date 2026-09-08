@@ -7,3 +7,4 @@
 .workspace-meetings button{justify-self:start;min-height:44px;padding:8px 16px;border:1px solid var(--line);border-radius:24px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer}
 .workspace-meetings button:disabled{opacity:.55;cursor:wait}
 .workspace-meetings button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.meeting-task-transcript{font-size:12px;max-height:320px;overflow:auto;overflow-wrap:anywhere}

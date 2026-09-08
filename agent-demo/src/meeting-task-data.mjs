@@ -7,6 +7,7 @@ export function meetingTasks(operations){
       id:op.id,
       title:typeof op.input?.mission==='string'&&op.input.mission.trim()||'Guest video meeting',
       status:transcriptRows(op.result).length?'Transcript available':statusName(op.status),
+      transcript:transcriptRows(op.result),
     })).reverse();
 }
 export function meetingStatusPrompt(meeting){

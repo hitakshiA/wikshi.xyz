@@ -9,6 +9,7 @@ import {Providers} from './providers.mjs';
 import {ApiError} from './catalog.mjs';
 import {RefundSigner} from './payments/hedera.mjs';
 import {receiveEmail} from './inbound.mjs';
+import {receiveVideoEvent} from './video-webhook.mjs';
 
 function credential(req) {
   const token=req.headers.authorization?.replace(/^Bearer /,'');
@@ -45,6 +46,12 @@ export function createApi(engine) {
       return send(200,{network:'hedera:testnet',access:'public-testnet',services:engine?.services()||[],status:engine?'configured':'configuration_required'});
     }
     if(!engine)throw new ApiError('not_found',404);
+    const videoWebhook=/^\/v1\/webhooks\/video\/([A-Za-z0-9_-]{43})$/.exec(req.url||'');
+    if(videoWebhook){
+      res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type');
+      if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
+      if(req.method==='POST')return send(200,receiveVideoEvent(engine,videoWebhook[1],await body(req)));
+    }
     if(req.method==='POST' && req.url==='/v1/webhooks/email')return send(200,await receiveEmail(engine,await rawBody(req),req.headers));
     if(req.method==='GET' && req.url==='/v1/docs'){res.setHeader('Content-Type','text/plain; charset=utf-8');res.end(readFileSync(new URL('../docs/api.md',import.meta.url)));return;}
     if(req.method==='GET' && req.url==='/v1/receipt-key')return send(200,engine.receiptKey);

@@ -80,7 +80,7 @@ test('non-email service payments and recovery never create an inbox',async()=>{
     ['contacts.reverse',{email:'ada@example.com'}],
     ['contacts.company',{domain:'example.com',page:1}],
     ['phone.call',{phone:'+15555550123',mission:'Ask about the requested business hours',maxSeconds:60,consent:true}],
-    ['video.meeting',{mission:'Ask about the requested project brief',questions:['What is the next step?'],maxSeconds:60,consent:true}],
+    ['video.meeting',{mission:'Ask about the requested project brief',questions:['What is the next step?'],maxSeconds:300,consent:true}],
   ];
   for(const [service,input] of cases){
     const {engine,store,env}=setup();

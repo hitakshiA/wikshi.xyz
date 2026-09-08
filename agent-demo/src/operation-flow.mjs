@@ -1,7 +1,7 @@
 import {terminal} from './card-data.mjs';
 
 export const isResearch=service=>typeof service==='string'&&(service.startsWith('discovery.')||service.startsWith('contacts.'));
-export const shouldPoll=op=>!['awaiting_payment','expired'].includes(op.status)&&!terminal.has(op.status)&&!(op.service==='video.meeting'&&op.status==='awaiting_guest');
+export const shouldPoll=op=>!['awaiting_payment','expired'].includes(op.status)&&!terminal.has(op.status);
 export const readyToSummarize=op=>!!op&&(terminal.has(op.status)||op.service==='video.meeting'&&op.status==='awaiting_guest');
 export const hasStarted=op=>!!op&&!['awaiting_payment','expired'].includes(op.status);
 export const deferResearchResult=(op,streaming,awaitingSummary)=>isResearch(op.service)&&op.status==='completed'&&(streaming||awaitingSummary);

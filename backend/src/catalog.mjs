@@ -40,7 +40,7 @@ export function validate(service,input) {
   if(service==='email.reply' && (!string(input.inboxId,36,36) || !string(input.messageId,36,36) || !string(input.text,1,10000)))throw new ApiError('invalid_message');
   if (['phone.call','video.meeting','email.send','email.reply'].includes(service) && input.consent!==true) throw new ApiError('consent_required');
   if (['phone.call','video.meeting'].includes(service)) {
-    const validDuration=service==='phone.call'?Number.isInteger(input.maxSeconds)&&input.maxSeconds>=60&&input.maxSeconds<=600:[60,120,180].includes(input.maxSeconds);
+    const validDuration=service==='phone.call'?Number.isInteger(input.maxSeconds)&&input.maxSeconds>=60&&input.maxSeconds<=600:input.maxSeconds===300;
     if (!string(input.mission,10,6000) || !validDuration) throw new ApiError('invalid_mission');
     if (service==='phone.call' && !/^\+[1-9]\d{7,14}$/.test(input.phone||'')) throw new ApiError('invalid_phone');
     if (service==='video.meeting' && (!Array.isArray(input.questions) || input.questions.length<1 || input.questions.length>3 || input.questions.some(q=>!string(q,3,250)))) throw new ApiError('invalid_questions');
@@ -71,7 +71,7 @@ export function catalog(env) {
     const prices=[{...ASSETS[USDC],rateAtomic:rate()},{...ASSETS[HBAR],rateAtomic:rate('_HBAR'),verification:'local_tests_only_live_verification_pending'}].filter(p=>p.rateAtomic);
     return {id,name,unit,prices,
     // Preserve legacy USDC fields. HBAR-only entries leave the legacy rate null.
-    rateAtomic:rate(),currency:'USDC',decimals:6,maxSeconds:id==='phone.call'?600:unit==='second'?180:undefined,
+    rateAtomic:rate(),currency:'USDC',decimals:6,maxSeconds:id==='video.meeting'?300:unit==='second'?600:undefined,
     durationEnforcement:id==='phone.call'?'none_customer_billing_ceiling_only':undefined,
     admission:id==='video.meeting'&&env.WIKSHI_VIDEO_MODE==='hosted'?'provider_hosted_not_strictly_one_use':undefined,
     enabled:Boolean(ready && prices.length && env.WIKSHI_MERCHANT_ACCOUNT && env.WIKSHI_MERCHANT_KEY),

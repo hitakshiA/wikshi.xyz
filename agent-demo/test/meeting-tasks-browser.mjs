@@ -22,7 +22,7 @@ try{for(const width of [1920,390]){
    const events=prompts.length===1?[{type:'text',text:'Your invitations are ready.'},...operations.map(operation=>({type:'operation',operation})),{type:'done'}]:[{type:'text',text:'Linda AI meeting has ended. Here is the transcript summary.'},{type:'operation',operation:{...operations[0],status:'completed',result:{transcript:[{role:'guest',text:'Linda AI looks useful.'}]}}},{type:'done'}];
    return route.fulfill({contentType:'application/x-ndjson',body:events.map(x=>JSON.stringify(x)).join('\n')+'\n'});
   }
-  if(path.startsWith('/chat-api/operations/')){reads.push(path);return json(operations.find(x=>path.endsWith(x.id)));}
+  if(path.startsWith('/chat-api/operations/')){reads.push(path);const op=operations.find(x=>path.endsWith(x.id));return json(op?.id==='meeting-two'?{...op,status:'completed',result:{transcript:[{role:'guest',text:'Automatically retrieved meeting transcript.'}]}}:op);}
   return json({ok:true,available:false});
  });
  await page.goto(base);
@@ -40,13 +40,18 @@ try{for(const width of [1920,390]){
  }),true);
  await page.waitForTimeout(5500);
  assert.equal(prompts.length,1);assert.equal(reads.some(x=>x.includes('meeting-')),false);
+ await tasks.getByText('Transcript available',{exact:true}).waitFor({timeout:20000});
+ assert(reads.some(x=>x.includes('meeting-two')));
+ assert.equal(prompts.length,1,'Background status checks must not create user prompts');
+ await tasks.getByText('Read transcript',{exact:true}).click();
+ await tasks.locator('.meeting-task-transcript p').filter({hasText:'Automatically retrieved meeting transcript.'}).waitFor();
  await tasks.getByRole('button',{name:'Check Status: Linda AI product discussion',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('.workspace-meetings button:disabled')?.textContent==='Checking…'||[...document.querySelectorAll('.workspace-meetings button:disabled')].some(x=>x.textContent==='Checking…'));
  assert.equal(await tasks.locator('button:not(:disabled)').count(),0);
  assert.match(prompts[1],/request meeting-one/);assert.doesNotMatch(prompts[1],/meeting-two/);
  assert.equal(await page.locator('.message-user').filter({hasText:'request meeting-one'}).count(),1);
  release();
- await tasks.getByText('Transcript available',{exact:true}).waitFor();
+ await tasks.locator('li').filter({hasText:'Linda AI product discussion'}).getByText('Transcript available',{exact:true}).waitFor();
  await tasks.getByRole('button',{name:'Check Status: Linda AI product discussion',exact:true}).waitFor();
  assert.deepEqual(errors,[]);
  await page.screenshot({path:`/tmp/wikshi-meeting-tasks-${width}.png`});

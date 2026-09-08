@@ -80,6 +80,7 @@ export function Payment({op,request,onUpdate,onPaid,onRefresh,batchOps,disabled=
       </div>
     </div>
     {brief&&<p className={`payment-brief-summary ${op.input?.to||op.input?.phone||batchOps?'has-recipient':''}`} title={brief}>{brief}</p>}
+    {op.service==='video.meeting'&&op.input?.maxSeconds&&<p className="payment-brief-summary">Up to {op.input.maxSeconds/60} minutes. Your guest can leave earlier.</p>}
     <details className="approval-brief"><summary>Request details{batchOps?` · ${payable.length} ${payable.length===1?'signature':'signatures'}`:''}</summary><DataDetails value={batchOps?{emails:payable.map(o=>({to:o.input?.to,subject:o.input?.subject})),signatures:payable.length}:op.input}/><p>{batchOps?`Each approved email is a separate exact x402 payment. Your wallet will ask for ${payable.length} ${payable.length===1?'signature':'signatures'}.`:'You approve this request and the amount shown. Nothing else.'}</p></details>
     {import.meta.env.VITE_WALLETCONNECT_PROJECT_ID&&<WalletChoice disabled={locked}/>}
     <div className="payment-actions">
@@ -102,7 +103,7 @@ export function OperationCard({op,request,onUpdate,onCheck,onPaid,onEmail,onRefr
   const [researchState,setResearchState]=useState<ResearchPollingState>({phase:'polling',reason:null,remainingMs:120000,error:''});
   const researchPoll=useRef<ReturnType<typeof startResearchPolling>|null>(null),currentOp=useRef(op);currentOp.current=op;
   const pollable=shouldPoll(op),fetcher=useRef(request),updater=useRef(onUpdate);fetcher.current=request;updater.current=onUpdate;
-  useEffect(()=>{if(!pollable||research)return;let stopped=false,timer:ReturnType<typeof setTimeout>;const poll=async()=>{try{const next=await fetcher.current(`/operations/${op.id}`);if(!stopped){updater.current(next);setPollError('');if(!shouldPoll(next))return;}}catch{if(!stopped)setPollError('Connection interrupted. Checking again shortly.');}if(!stopped)timer=setTimeout(poll,calling?5000:2000);};timer=setTimeout(poll,1000);return()=>{stopped=true;clearTimeout(timer);};},[op.id,pollable,calling,research]);
+  useEffect(()=>{if(!pollable||research)return;let stopped=false,timer:ReturnType<typeof setTimeout>;const delay=meeting?15000:calling?5000:2000;const poll=async()=>{try{const next=await fetcher.current(`/operations/${op.id}`);if(!stopped){updater.current(next);setPollError('');if(!shouldPoll(next))return;}}catch{if(!stopped)setPollError('Connection interrupted. Checking again shortly.');}if(!stopped)timer=setTimeout(poll,delay);};timer=setTimeout(poll,meeting?delay:1000);return()=>{stopped=true;clearTimeout(timer);};},[op.id,pollable,calling,meeting,research]);
   useEffect(()=>{
     if(!research||!pollable)return;
     let marked=false;

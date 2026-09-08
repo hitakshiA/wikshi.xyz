@@ -11,6 +11,7 @@ export function MeetingTasks({operations,disabled,onCheck}:{operations:Operation
     <ul>{meetings.map(meeting=><li key={meeting.id}>
       <strong title={meeting.title}>{meeting.title}</strong>
       <span>{meeting.status}</span>
+      {meeting.transcript.length>0&&<details className="meeting-task-transcript"><summary>Read transcript</summary>{meeting.transcript.map((row,i)=><p key={i}><strong>{row.role}</strong><br/>{row.text}</p>)}</details>}
       <button type="button" disabled={disabled||!!checking} aria-label={`Check Status: ${meeting.title}`} onClick={async()=>{
         setChecking(meeting.id);
         try{await onCheck(meetingStatusPrompt(meeting));}finally{setChecking('');}
