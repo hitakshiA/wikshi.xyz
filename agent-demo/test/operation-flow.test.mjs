@@ -21,10 +21,22 @@ test('paid lookups stay in the card until a terminal outcome',()=>{
     for(const status of ['completed','failed','cancelled','payment_rejected']){assert(!shouldPoll({service,status}));assert(readyToSummarize({service,status}));}
   }
 });
-test('guest invitations do not keep polling while waiting for a person',()=>{
+test('guest invitations keep refreshing while waiting for a person',()=>{
   assert(shouldPoll({service:'video.meeting',status:'awaiting_guest'}));
   assert(readyToSummarize({service:'video.meeting',status:'awaiting_guest'}));
   assert(!readyToSummarize(undefined));
+});
+test('completed meetings and calls poll until refunds settle without restarting the service',()=>{
+  for(const service of ['video.meeting','phone.call']){
+    const op={service,status:'completed',receipt:{refundDueAtomic:'246000'}};
+    assert(shouldPoll(op));
+    for(const status of ['pending','submitting','confirming'])assert(shouldPoll({...op,refund:{status}}));
+    assert(!shouldPoll({...op,refund:{status:'confirmed'}}));
+    assert(!shouldPoll({...op,refund:{status:'failed'}}));
+    assert(!shouldPoll({...op,receipt:{refundDueAtomic:'0'}}));
+    assert(!shouldPoll({...op,receipt:{refundDueAtomic:'invalid'}}));
+    assert(readyToSummarize(op));
+  }
 });
 test('all research capabilities use attachments and continuation stays on the approved work',()=>{
   for(const service of ['discovery.search','discovery.companies','discovery.people','discovery.contents','contacts.enrich','contacts.company','contacts.phone','contacts.reverse'])assert(isResearch(service));

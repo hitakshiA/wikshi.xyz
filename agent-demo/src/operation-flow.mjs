@@ -1,7 +1,12 @@
 import {terminal} from './card-data.mjs';
 
 export const isResearch=service=>typeof service==='string'&&(service.startsWith('discovery.')||service.startsWith('contacts.'));
-export const shouldPoll=op=>!['awaiting_payment','expired'].includes(op.status)&&!terminal.has(op.status);
+export const shouldPoll=op=>!['awaiting_payment','expired'].includes(op.status)&&(!terminal.has(op.status)||['phone.call','video.meeting'].includes(op.service)&&refundPending(op));
+function refundPending(op){
+  if(op.refund?.status==='confirmed'||op.refund?.status==='failed')return false;
+  if(['pending','confirming','submitting'].includes(op.refund?.status))return true;
+  try{return BigInt(op.receipt?.refundDueAtomic||0)>0n;}catch{return false;}
+}
 export const readyToSummarize=op=>!!op&&(terminal.has(op.status)||op.service==='video.meeting'&&op.status==='awaiting_guest');
 export const hasStarted=op=>!!op&&!['awaiting_payment','expired'].includes(op.status);
 export const deferResearchResult=(op,streaming,awaitingSummary)=>isResearch(op.service)&&op.status==='completed'&&(streaming||awaitingSummary);

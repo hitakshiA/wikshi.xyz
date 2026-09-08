@@ -29,7 +29,7 @@ function ActivityRecord({op}:{op:Operation}){
   const receiptFields=receipt?[
     {label:'Prepaid',value:tokenAmount(receipt.prepaidAtomic,receipt)},
     {label:'Charged',value:tokenAmount(receipt.chargedAtomic,receipt)},
-    {label:'Refund due',value:tokenAmount(receipt.refundDueAtomic,receipt)},
+    {label:op.refund?.status==='confirmed'?'Refunded':'Refund due',value:tokenAmount(receipt.refundDueAtomic,receipt)},
     {label:'Billed usage',value:Number.isFinite(receipt.units)?`${receipt.units} ${receipt.unit==='second'?(receipt.units===1?'second':'seconds'):receipt.unit==='request'?(receipt.units===1?'request':'requests'):(receipt.units===1?'unit':'units')}`:null},
     {label:'Duration',value:Number.isFinite(receipt.measuredSeconds)?`${receipt.measuredSeconds} ${receipt.measuredSeconds===1?'second':'seconds'}`:null},
     {label:receipt.unit==='second'?'Per second':receipt.unit==='request'?'Per request':'Rate',value:tokenAmount(receipt.rateAtomic,receipt)},
@@ -46,7 +46,7 @@ function ActivityRecord({op}:{op:Operation}){
     {label:'Receipt signature',value:receipt.signature},
   ]:[],...confirmedRefund?[{label:'Refund transaction',value:op.refund.transaction}]:[]].filter((row):row is {label:string;value:string}=>typeof row.value==='string'&&row.value.length>0);
   return <details className={`workspace-activity-record activity-${kind}`}>
-    <summary><span className="workspace-activity-icon"><ActivityIcon kind={kind}/></span><span className="workspace-activity-label"><strong>{serviceName(op.service)}</strong><small>{statusName(op.status)}</small></span><span className="workspace-activity-amount">{amount&&<><small>{amount.label}</small><span>{amount.value}</span></>}<span className="workspace-activity-chevron" aria-hidden="true">⌄</span></span></summary>
+    <summary><span className="workspace-activity-icon"><ActivityIcon kind={kind}/></span><span className="workspace-activity-label"><strong>{serviceName(op.service)}</strong><small>{statusName(op.status)}</small>{refundAmount&&<small>{confirmedRefund?'Refund confirmed':op.refund?.status==='failed'?'Refund needs attention':'Refund pending'} · {refundAmount}</small>}</span><span className="workspace-activity-amount">{amount&&<><small>{amount.label}</small><span>{amount.value}</span></>}<span className="workspace-activity-chevron" aria-hidden="true">⌄</span></span></summary>
     <div className="workspace-activity-expanded">
       {summary&&<p className="workspace-result-summary">{summary}</p>}
       {fields.length>0&&<details className="workspace-request-details"><summary>{kind==='calls'||kind==='meetings'?'Conversation details':'Request details'}</summary><Fields fields={fields}/></details>}
