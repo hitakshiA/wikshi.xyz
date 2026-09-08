@@ -86,7 +86,11 @@ export function createApi(engine) {
     const route=/^\/v1\/operations\/([a-f0-9-]{36})(?:\/(pay|cancel))?$/.exec(req.url||'');
     if(route){
       if(req.method==='GET' && !route[2])return send(200,engine.view(engine.authorize(route[1],token)));
-      if(req.method==='POST' && route[2]==='cancel')return send(200,engine.view(await engine.cancel(route[1],token)));
+      if(req.method==='POST' && route[2]==='cancel'){
+        const data=Number(req.headers['content-length'])>0||req.headers['transfer-encoding']?await body(req):{};
+        if(!data || typeof data!=='object' || Array.isArray(data) || Object.keys(data).some(key=>key!=='reason') || (data.reason!==undefined && !['user','timeout'].includes(data.reason)))throw new ApiError('invalid_cancellation_reason');
+        return send(200,engine.view(await engine.cancel(route[1],token,data.reason||'user')));
+      }
       if(req.method==='POST' && route[2]==='pay'){
         const data=await body(req);let payload=data.payment;
         if(req.headers['payment-signature']){try{payload=JSON.parse(Buffer.from(req.headers['payment-signature'],'base64').toString());}catch{throw new ApiError('invalid_payment');}}

@@ -234,7 +234,7 @@ async function checkCancellation(browser,width){
   await page.waitForFunction(()=>!document.querySelector('.composer span'));
   await page.locator('#mission').fill(nextPrompt);
   await page.getByRole('button',{name:'Cancel request',exact:true}).click();
-  await page.getByText('Request cancelled',{exact:true}).waitFor();
+  await page.getByText('Research cancelled',{exact:true}).waitFor();
   assert.equal(cancellations,1);
   assert.equal(turns,1,'cancelling a quote does not run the model');
   assert.equal(await page.locator('.message-user').count(),1,'cancel action is not a synthetic user message');

@@ -10,7 +10,7 @@ import {InboxPanel} from './inbox-panel';
 import {WorkspaceActivity} from './workspace-activity';
 import {terminal} from './card-data.mjs';
 import {ResearchPanel} from './research-panel';
-import {readyToSummarize,hasStarted,continuationPrompt} from './operation-flow.mjs';
+import {readyToSummarize,hasStarted,continuationPrompt,isResearch,mergeOperation} from './operation-flow.mjs';
 
 type Message={id:string;role:'user'|'assistant';text:string;tools?:ToolRun[]};
 type Continuation={messageId:string;ids:string[];retryNeeded?:boolean};
@@ -32,8 +32,8 @@ function App(){
   const inboxHeading=useRef<HTMLButtonElement>(null);
   const bottom=useRef<HTMLDivElement>(null),composerInput=useRef<HTMLTextAreaElement>(null),pending=useRef(false),sessionToken=useRef('');
   useEffect(()=>{const resize=()=>{const el=composerInput.current;if(!el)return;el.style.height='auto';el.style.height=`${Math.min(el.scrollHeight,window.innerHeight*.4)}px`;};resize();window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[input]);
-  async function request(path:string,data?:unknown,method=data?'POST':'GET'){
-    const r=await fetch('/chat-api'+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${sessionToken.current}`},body:data?JSON.stringify(data):undefined});const value=await r.json();if(!r.ok)throw Error(value.error||'Request failed.');return value;
+  async function request(path:string,data?:unknown,method=data?'POST':'GET',signal?:AbortSignal){
+    const r=await fetch('/chat-api'+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${sessionToken.current}`},body:data?JSON.stringify(data):undefined,signal});const value=await r.json();if(!r.ok)throw Object.assign(Error(value.error||'Request failed.'),{status:r.status});return value;
   }
   useEffect(()=>{let cancelled=false;fetch('/chat-api/sessions',{method:'POST'}).then(async r=>{if(!r.ok)throw Error('Could not start a chat. Please reload.');return r.json();}).then(s=>{if(cancelled){fetch('/chat-api/session',{method:'DELETE',headers:{Authorization:`Bearer ${s.token}`}});return;}sessionToken.current=s.token;setToken(s.token);}).catch(e=>setError(e.message));
     const heart=setInterval(()=>{if(sessionToken.current)request('/heartbeat',{}).catch(e=>setError(e.message));},20_000);
@@ -41,7 +41,7 @@ function App(){
     window.addEventListener('pagehide',close);return()=>{cancelled=true;clearInterval(heart);window.removeEventListener('pagehide',close);close();};
   },[]);
   useEffect(()=>{if(stickToBottom.current&&scrollArea.current)scrollArea.current.scrollTop=scrollArea.current.scrollHeight;},[messages,busy,operations,batches]);
-  const update=(incoming:Operation&{batch?:DraftBatch;operationUpdates?:Operation[];cancellationError?:string;cancellation?:unknown})=>{const {batch,operationUpdates,cancellationError,cancellation,...op}=incoming;if(cancellationError)setError(cancellationError);if(batch)setBatches(all=>all.map(item=>item.id===batch.id?batch:item));setOperations(all=>all.some(x=>x.id===op.id)?all.map(x=>x.id===op.id?{...x,...op}:x):[...all,op]);};
+  const update=(incoming:Operation&{batch?:DraftBatch;operationUpdates?:Operation[];cancellationError?:string})=>{const {batch,operationUpdates,cancellationError,...op}=incoming;if(cancellationError)setError(cancellationError);if(batch)setBatches(all=>all.map(item=>item.id===batch.id?batch:item));setOperations(all=>all.some(x=>x.id===op.id)?all.map(x=>x.id===op.id?mergeOperation(x,op):x):[...all,op]);};
   async function send(message=input,automatic=false,targetId?:string,completionIds?:string[]):Promise<boolean>{if(!message.trim()||pending.current||!token)return false;const previous=targetId?messages.find(m=>m.id===targetId):undefined;let streamedText='',finished=false,streamFailed=false,success=false;pending.current=true;setBusy(true);setError('');if(!automatic)setInput('');const assistantId=targetId||crypto.randomUUID();if(!automatic)stickToBottom.current=true;setStreamingId(assistantId);setMessages(all=>targetId&&all.some(m=>m.id===targetId)?all.map(m=>m.id===targetId?{...m,text:'',tools:[]}:m):[...all,...(automatic?[]:[{id:crypto.randomUUID(),role:'user' as const,text:message}]),{id:assistantId,role:'assistant',text:''}]);
     try{const r=await fetch('/chat-api/message',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({message,...(completionIds?{completionIds}:{})})});if(!r.ok){const data=await r.json();throw Error(data.error||'Could not send message.');}
       const event=(e:any)=>{if(e.type==='text'||e.type==='text_boundary'){streamedText=appendAssistantText(streamedText,e);setMessages(all=>all.map(m=>m.id===assistantId?{...m,text:appendAssistantText(m.text,e)}:m));}if(e.type==='operation'){if(!owners.current.has(e.operation.id))owners.current.set(e.operation.id,assistantId);update(e.operation);}if(e.type==='draft_batch'){if(!batchOwners.current.has(e.batch.id))batchOwners.current.set(e.batch.id,assistantId);setBatches(all=>all.some(b=>b.id===e.batch.id)?all.map(b=>b.id===e.batch.id?e.batch:b):[...all,e.batch]);}if(e.type==='inboxes')setInboxes(e.inboxes||[]);if(e.type==='tool')setMessages(all=>all.map(m=>m.id===assistantId?{...m,tools:updateToolRun(m.tools||[],e)}:m));if(e.type==='done')finished=true;if(e.type==='error'){streamFailed=true;setError(e.message||'The agent could not finish this response.');}};
@@ -61,9 +61,10 @@ function App(){
   }
   useEffect(()=>{
     if(busy||pending.current)return;
-    const ready=continuations.find(group=>!group.retryNeeded&&!continuing.current.has(continuationKey(group))&&group.ids.every(id=>readyToSummarize(operations.find(op=>op.id===id))));
+    const ready=continuations.find(group=>!group.retryNeeded&&!continuing.current.has(continuationKey(group))&&group.ids.every(id=>{const op=operations.find(op=>op.id===id);return !op?.clientCancelling&&readyToSummarize(op);}));
     if(!ready)return;const key=continuationKey(ready);
     if(continuing.current.has(key))return;continuing.current.add(key);
+    if(ready.ids.every(id=>{const op=operations.find(op=>op.id===id);return op&&isResearch(op.service)&&op.status==='cancelled';})){setContinuations(all=>all.filter(group=>continuationKey(group)!==key));return;}
     void send(continuationPrompt(ready.ids),true,ready.messageId,ready.ids).then(success=>setContinuations(all=>success?all.filter(group=>continuationKey(group)!==key):all.map(group=>continuationKey(group)===key?{...group,retryNeeded:true}:group)));
   },[continuations,operations,busy]);
   function retrySummary(messageId:string){if(busy||pending.current)return;const group=continuations.find(item=>item.messageId===messageId&&item.retryNeeded);if(!group)return;continuing.current.delete(continuationKey(group));setContinuations(all=>all.map(item=>item===group?{...item,retryNeeded:false}:item));}

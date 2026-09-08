@@ -3,24 +3,71 @@ import {hash} from './store.mjs';
 import {ApiError,catalog,validate,emailAddress} from './catalog.mjs';
 import {Blocky,NETWORK,ASSETS} from './payments/blocky.mjs';
 import {inspectPayment,confirmTransfer} from './payments/hedera.mjs';
-import {cancelUnpaidOperation} from './cancel.mjs';
+import {cancelUnpaidOperation,cancelResearchOperation,isResearchService} from './cancel.mjs';
 
 export class Engine {
   constructor({store,env,providers,blocky=new Blocky(),inspect=inspectPayment,confirm=confirmTransfer,refundSigner}) {
     Object.assign(this,{store,env,providers,blocky,inspect,confirm,refundSigner});
+    this.researchTimers=new Map();this.researchControllers=new Map();this.cancelWork=new Map();this.refundWork=new Map();this.confirmWork=new Map();
     const seed=createHmac('sha256',store.key).update('wikshi-receipts-ed25519-v1').digest();
     this.signingKey=createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),seed]),format:'der',type:'pkcs8'});
     this.receiptKey=createPublicKey(this.signingKey).export({format:'jwk'});
+  }
+  clearResearchDeadline(id){clearTimeout(this.researchTimers.get(id));this.researchTimers.delete(id);}
+  armResearchDeadline(op){
+    if(!isResearchService(op.data.service)||!Number.isFinite(op.data.researchDeadlineAt)||['completed','cancelled','failed','expired','payment_rejected'].includes(op.state))return;
+    this.clearResearchDeadline(op.id);
+    const timer=setTimeout(()=>{try{this.refreshResearch(op);void this.reconcileResearchCancellations();}catch{}},Math.max(0,op.data.researchDeadlineAt-Date.now()));
+    timer.unref?.();this.researchTimers.set(op.id,timer);
+  }
+  cancelledResearchReceipt(op){
+    if(!op.data.payment?.confirmed)return;
+    op.data.cancellation.paymentStatus='confirmed';
+    if(!op.data.receipt){
+      const receipt={version:1,operationId:op.id,network:NETWORK,...ASSETS[op.data.requirements.asset],paymentTransaction:op.data.payment.tx,
+        prepaidAtomic:op.data.requirements.amount,unit:op.data.price.unit,rateAtomic:op.data.price.rateAtomic,units:0,chargedAtomic:'0',refundDueAtomic:op.data.requirements.amount,
+        resultHash:hash(JSON.stringify(null)),outcome:'cancelled',cancellationReason:op.data.cancellation.reason,issuedAt:new Date().toISOString()};
+      const canonical=JSON.stringify(receipt);
+      op.data.receipt={...receipt,signature:sign(null,Buffer.from(canonical),this.signingKey).toString('base64'),signedPayload:Buffer.from(canonical).toString('base64')};
+    }
+    if(!op.data.refund)op.data.refund={amount:op.data.requirements.amount,status:'pending'};
+  }
+  refreshResearch(op){
+    if(!isResearchService(op.data.service))return op;
+    let current=this.store.get(op.id)||op;
+    if(Number.isFinite(current.data.researchDeadlineAt) && current.data.researchDeadlineAt<=Date.now() && !['completed','cancelled','failed','expired','payment_rejected'].includes(current.state)){
+      current=cancelResearchOperation(this.store,current.id,null,{reason:'timeout',internal:true,receipt:value=>this.cancelledResearchReceipt(value)});
+    }
+    if(current.state==='cancelled'){
+      this.clearResearchDeadline(current.id);this.researchControllers.get(current.id)?.abort();
+    }
+    return current;
+  }
+  sweepResearchDeadlines(){
+    for(const row of this.store.db.prepare("SELECT id FROM operations WHERE state NOT IN ('completed','cancelled','failed','expired','payment_rejected')").all())this.refreshResearch(this.store.get(row.id));
+  }
+  async reconcileResearchCancellations(){
+    const work=[];
+    for(const {id} of this.store.db.prepare("SELECT id FROM operations WHERE state='cancelled'").all()){
+      const op=this.store.get(id);if(!isResearchService(op.data.service)||!op.data.payment||op.data.refund?.status==='confirmed')continue;
+      if(this.cancelWork.has(id)){work.push(this.cancelWork.get(id));continue;}
+      const task=Promise.resolve().then(async()=>{try{if(!op.data.payment.confirmed)await this.reconcilePayment(op);const current=this.store.get(id);if(current.data.payment?.confirmed)await this.refund(current);}catch{}}).finally(()=>this.cancelWork.delete(id));
+      this.cancelWork.set(id,task);work.push(task);
+    }
+    await Promise.all(work);
   }
   services(){return catalog(this.env);}
   authorize(id,credential) {
     const op=this.store.get(id);
     if(!op || op.auth!==hash(credential))throw new ApiError('not_found',404);
-    return op;
+    return this.refreshResearch(op);
   }
   view(op) {
+    op=this.refreshResearch(op);
     const data=op.data;
     return {id:op.id,service:data.service,status:op.state,createdAt:new Date(op.created).toISOString(),expiresAt:new Date(data.expires).toISOString(),
+      researchStartedAt:Number.isFinite(data.researchStartedAt)?new Date(data.researchStartedAt).toISOString():undefined,
+      researchDeadlineAt:Number.isFinite(data.researchDeadlineAt)?new Date(data.researchDeadlineAt).toISOString():undefined,cancellation:data.cancellation,
       paymentOptions:(data.offers||[{requirements:data.requirements,price:data.price}]).map(o=>({...ASSETS[o.requirements.asset],amountAtomic:o.requirements.amount,rateAtomic:o.price.rateAtomic})),
       payment:data.payment?{...ASSETS[data.requirements.asset],amountAtomic:data.requirements.amount,confirmed:data.payment.confirmed===true}:undefined,
       result:data.result,inbox:data.inbox,receipt:data.receipt,refund:data.refund?{...ASSETS[data.requirements.asset],status:data.refund.status,amountAtomic:data.refund.amount,transaction:data.refund.status==='confirmed'?data.refund.tx:undefined}:undefined,
@@ -79,31 +126,46 @@ export class Engine {
       if(!this.services().some(s=>s.id===op.data.service && s.enabled))throw new ApiError('service_unavailable',503);
       this.store.db.prepare('INSERT INTO payments VALUES(?,?)').run(payment.tx,id);
       op.data.requirements=selected.requirements;op.data.price=selected.price;
+      if(isResearchService(op.data.service)){op.data.researchStartedAt=Date.now();op.data.researchDeadlineAt=op.data.researchStartedAt+120000;}
       op.state='verifying_payment';op.data.payment={...payment,payload};this.store.save(op);return true;
     });
     if(!claimed)return op;
+    this.armResearchDeadline(op);
     let verified;
     try {verified=await this.blocky.verify(payload,op.data.requirements);if(verified.payer!==payment.payer)throw new Error();}
-    catch {op.state='payment_rejected';op.data.error='payment_rejected';this.store.save(op);return op;}
+    catch {op=this.refreshResearch(this.store.get(id));if(op.state==='cancelled')return op;op.state='payment_rejected';op.data.error='payment_rejected';this.store.save(op);this.clearResearchDeadline(id);return op;}
+    op=this.refreshResearch(this.store.get(id));if(op.state==='cancelled')return op;
     op.state='settling_payment';this.store.save(op);
+    let facilitatorConfirmed=false;
     try {
       const settled=await this.blocky.settle(payload,op.data.requirements);
       if(settled.payer!==payment.payer || settled.transaction!==payment.tx)throw new Error();
-      op.data.payment.facilitatorConfirmed=true;
-    } catch {op.data.payment.facilitatorConfirmed=false;}
+      facilitatorConfirmed=true;
+    } catch {/* Independent confirmation determines whether payment actually arrived. */}
+    op=this.refreshResearch(this.store.get(id));op.data.payment.facilitatorConfirmed=facilitatorConfirmed;
     // Independently confirm exact payer, recipient, token and amount on Mirror before dispatch.
-    op.state='confirming_payment';this.store.save(op);
+    if(op.state!=='cancelled')op.state='confirming_payment';this.store.save(op);
     await this.reconcilePayment(op);
+    if(this.store.get(id).state==='cancelled')void this.reconcileResearchCancellations();
     return this.store.get(id);
   }
   async reconcilePayment(op) {
-    try {
-      if(await this.confirm(op.data.payment.tx,{payer:op.data.payment.payer,payTo:op.data.requirements.payTo,amount:op.data.requirements.amount,asset:op.data.requirements.asset,memo:`wikshi:${op.id}`})) {
-        // Grants follow a freshly verified payment signature, never a public transaction ID.
-        this.store.atomic(()=>{this.store.bindPayer(op.auth,op.data.payment.payer);op.state='queued';op.data.payment.confirmed=true;delete op.data.payment.payload;this.store.save(op);});
+    if(this.confirmWork.has(op.id))return this.confirmWork.get(op.id);
+    const task=Promise.resolve().then(async()=>{try{
+      op=this.refreshResearch(this.store.get(op.id));
+      if(!op.data.payment || op.data.payment.confirmed)return;
+      if(await this.confirm(op.data.payment.tx,{payer:op.data.payment.payer,payTo:op.data.requirements.payTo,amount:op.data.requirements.amount,asset:op.data.requirements.asset,memo:`wikshi:${op.id}`})){
+        op=this.refreshResearch(this.store.get(op.id));
+        // Re-read after network I/O so cancellation and completion cannot be
+        // overwritten by an older verification promise.
+        this.store.atomic(()=>{op=this.store.get(op.id);if(op.data.payment.confirmed)return;
+          this.store.bindPayer(op.auth,op.data.payment.payer);op.data.payment.confirmed=true;delete op.data.payment.payload;
+          if(op.state==='cancelled' && isResearchService(op.data.service))this.cancelledResearchReceipt(op);
+          else op.state='queued';this.store.save(op);});
         this.attachInbox(op);
       }
-    } catch {/* Mirror lag or outage is not payment failure. */}
+    }catch{/* Mirror lag or outage is not payment failure. */}}).finally(()=>this.confirmWork.delete(op.id));
+    this.confirmWork.set(op.id,task);return task;
   }
   attachInbox(op) {
     // A research, contact or conversation purchase can recover access to an
@@ -112,6 +174,7 @@ export class Engine {
     if(inbox && op.data.inbox?.id!==inbox.id){op.data.inbox={id:inbox.id,address:inbox.address};this.store.save(op);}
   }
   finish(op,result,seconds=undefined) {
+    if(isResearchService(op.data.service)){op=this.refreshResearch(op);if(op.state==='cancelled')return op;this.clearResearchDeadline(op.id);}
     if(seconds!==undefined && (!Number.isFinite(seconds) || seconds<0))throw new Error('Invalid measured duration');
     const prepaid=BigInt(op.data.requirements.amount), rate=BigInt(op.data.price.rateAtomic);
     const units=seconds===undefined?1:Math.min(op.data.input.maxSeconds,Math.ceil(seconds));
@@ -126,9 +189,11 @@ export class Engine {
     this.store.save(op);
   }
   fail(op,code='service_execution_failed') {
+    if(isResearchService(op.data.service)){op=this.refreshResearch(op);if(op.state==='cancelled')return op;this.clearResearchDeadline(op.id);}
     op.state='failed';op.data.error=code;op.data.refund={amount:op.data.requirements.amount,status:'pending'};this.store.save(op);
   }
   async dispatch(op) {
+    op=this.refreshResearch(op);
     const claimed=this.store.atomic(()=>{
       op=this.store.get(op.id);
       if(op.state!=='queued')return false;
@@ -136,9 +201,12 @@ export class Engine {
       op.state='dispatching';this.store.save(op);return true;
     });
     if(!claimed)return;
+    const controller=isResearchService(op.data.service)?new AbortController():null;
+    if(controller)this.researchControllers.set(op.id,controller);
     try {
       this.attachInbox(op);
-      const output=await this.providers.execute(op,this.store);
+      const output=await this.providers.execute(op,this.store,{signal:controller?.signal});
+      op=this.refreshResearch(this.store.get(op.id));if(op.state==='cancelled')return;
       if(op.data.service==='email.inbox')this.attachInbox(op);
       if(output.resource){this.store.atomic(()=>{this.store.putResource(output.resource.id,op.auth,output.resource);op.data.resourceId=output.resource.id;this.store.save(op);});output.result.inboxId=output.resource.id;}
       if(output.done)this.finish(op,output.result);
@@ -154,9 +222,10 @@ export class Engine {
         } else this.store.save(op);
       }
     } catch(error) {
+      op=this.refreshResearch(this.store.get(op.id));if(op.state==='cancelled')return;
       if(error.uncertain || !(error.name==='Error' && error.message==='service_execution_failed')) {op.state='execution_unknown';op.data.error='execution_requires_reconciliation';this.store.save(op);}
       else this.fail(op);
-    }
+    }finally{this.researchControllers.delete(op.id);}
   }
   async join(guest) {
     const op=this.store.atomic(()=>{
@@ -177,20 +246,32 @@ export class Engine {
       throw new ApiError('meeting_connection_unavailable',503);
     }
   }
-  async cancel(id,credential) {
-    return cancelUnpaidOperation(this.store,id,credential);
+  async cancel(id,credential,reason='user') {
+    if(!['user','timeout'].includes(reason))throw new ApiError('invalid_cancellation_reason');
+    const op=this.authorize(id,credential);
+    if(!isResearchService(op.data.service)){if(reason==='timeout')throw new ApiError('cannot_cancel_current_state',409);return cancelUnpaidOperation(this.store,id,credential);}
+    const cancelled=cancelResearchOperation(this.store,id,credential,{reason,receipt:value=>this.cancelledResearchReceipt(value)});
+    this.clearResearchDeadline(id);this.researchControllers.get(id)?.abort();
+    void this.reconcileResearchCancellations();return cancelled;
   }
   async refund(op) {
-    const r=op.data.refund;if(!r || r.status==='confirmed')return;
-    if(r.status==='pending' && this.refundSigner) {
-      const prepared=await this.refundSigner.prepare(op.data.payment.payer,r.amount,op.id,op.data.requirements.asset);
-      Object.assign(r,prepared,{status:'submitting'});this.store.save(op);
-      try{await this.refundSigner.submit(prepared);}catch{/* Never generate a new transaction to retry. */}
-      r.status='confirming';this.store.save(op);
-    }
-    if(r.tx && await this.confirm(r.tx,{payer:this.env.WIKSHI_MERCHANT_ACCOUNT,payTo:op.data.payment.payer,amount:r.amount,asset:op.data.requirements.asset,memo:`refund:${op.id}`})) {
-      r.status='confirmed';delete r.bytes;this.store.save(op);
-    }
+    const id=op.id;if(this.refundWork.has(id))return this.refundWork.get(id);
+    const task=Promise.resolve().then(async()=>{
+      op=this.store.get(id);let r=op.data.refund;if(!r || r.status==='confirmed')return;
+      if(r.status==='pending' && this.refundSigner){
+        const prepared=await this.refundSigner.prepare(op.data.payment.payer,r.amount,id,op.data.requirements.asset);
+        op=this.store.get(id);r=op.data.refund;if(r.status!=='pending')return;
+        Object.assign(r,prepared,{status:'submitting'});this.store.save(op);
+        try{await this.refundSigner.submit(prepared);}catch{/* Never generate a new transaction to retry. */}
+        op=this.store.get(id);r=op.data.refund;if(r.tx===prepared.tx && r.status==='submitting'){r.status='confirming';this.store.save(op);}
+      }
+      const tx=r.tx;
+      if(tx && await this.confirm(tx,{payer:this.env.WIKSHI_MERCHANT_ACCOUNT,payTo:op.data.payment.payer,amount:r.amount,asset:op.data.requirements.asset,memo:`refund:${id}`})){
+        op=this.store.get(id);r=op.data.refund;if(r.tx!==tx)return;
+        r.status='confirmed';delete r.bytes;this.store.save(op);
+      }
+    }).finally(()=>this.refundWork.delete(id));
+    this.refundWork.set(id,task);return task;
   }
   recover() {
     let pending;
@@ -200,20 +281,30 @@ export class Engine {
     // Restore access grants to existing inboxes, without creating mailboxes for
     // historical research or conversation purchases during a restart.
     for(const row of this.store.db.prepare('SELECT id FROM operations').all()){
-      const op=this.store.get(row.id);
+      let op=this.store.get(row.id);
+      if(isResearchService(op.data.service) && op.data.payment && !['completed','cancelled','failed','expired','payment_rejected'].includes(op.state)){
+        if(!Number.isFinite(op.data.researchDeadlineAt)){op.data.researchStartedAt=Date.now();op.data.researchDeadlineAt=op.data.researchStartedAt+120000;this.store.save(op);}
+        op=this.refreshResearch(op);this.armResearchDeadline(op);
+      }
       if(op.data.payment?.confirmed){this.store.bindPayer(op.auth,op.data.payment.payer);this.attachInbox(op);}
     }
+    void this.reconcileResearchCancellations();
   }
   async tick() {
+    // The independent server interval invokes this even while a previous tick
+    // is blocked on a provider. Timers enforce the exact research deadline;
+    // this sweep and independent refund work also recover across restarts.
+    this.sweepResearchDeadlines();void this.reconcileResearchCancellations();
     if(this.busy)return;this.busy=true;
     try {
       for(const candidate of ['confirming_payment','queued','running','awaiting_guest','awaiting_payment'].flatMap(state=>this.store.list([state]))) {
-        const op=this.store.get(candidate.id);
+        let op=this.store.get(candidate.id);
         try {
           if(op.state==='confirming_payment')await this.reconcilePayment(op);
           else if(op.state==='queued')await this.dispatch(op);
           else if(op.state==='running') {
             const done=await this.providers.poll(op);
+            op=this.refreshResearch(this.store.get(op.id));if(op.state!=='running')continue;
             if(done){
               // Completion and transcript availability can arrive separately. Wait for two
               // identical reads ten seconds apart before archiving and deleting the agent.
@@ -221,7 +312,9 @@ export class Engine {
               const fingerprint=hash(JSON.stringify(done.transcript));
               if(op.data.transcriptCandidate!==fingerprint){op.data.transcriptCandidate=fingerprint;op.data.transcriptObservedAt=Date.now();this.store.save(op);continue;}
               if(Date.now()-op.data.transcriptObservedAt<10000)continue;
-              this.finish(op,{transcript:done.transcript},done.seconds);op.data.cleanupPending=Boolean(op.data.private?.agentId);this.store.save(op);
+              this.finish(op,{transcript:done.transcript},done.seconds);op=this.store.get(op.id);
+              if(op.state==='cancelled')continue;
+              op.data.cleanupPending=Boolean(op.data.private?.agentId);this.store.save(op);
             }
           } else if(op.state==='awaiting_guest'){
             // Hosted admission happens on bey.chat, not through our join endpoint.

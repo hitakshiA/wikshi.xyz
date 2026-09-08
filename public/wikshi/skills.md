@@ -114,7 +114,11 @@ Do not execute the transaction separately: Wikshi submits through the facilitato
 
 A timeout is not proof of failure. Query the original operation before retrying. Reuse its credential, body, idempotency key, and already-signed payment when appropriate; never sign a fresh transfer while confirmation is pending. For `execution_unknown`, stop and report that the provider may have acted. Do not resend an email or launch a duplicate call. `failed`, `expired`, `cancelled`, and `payment_rejected` are not successful outcomes.
 
-When the user cancels an unpaid request, call `POST /v1/operations/<id>/cancel` with the same credential and verify the returned `cancelled` status. Only unpaid or expired quotes without a payment claim can be cancelled. A payment already being verified, queued work, and running services cannot be cancelled through this path. Never report cancellation from conversation text alone, and never pay a cancelled quote. A confirmed cancellation releases the request so the user can move on.
+When the user cancels a request, call `POST /v1/operations/<id>/cancel` with the same credential and `{ "reason": "user" }`, then verify the returned `cancelled` status. Research and contact lookups (`discovery.*`, `contacts.*`) can be cancelled after payment has started. They also have a server-enforced 120-second deadline from `researchStartedAt` to `researchDeadlineAt`. Continue polling every few seconds until a terminal state; `{ "reason": "timeout" }` is accepted only after the server's stored deadline. Do not automatically purchase a replacement lookup.
+
+Cancelled research with a confirmed payment receives a signed zero-charge receipt and a full refund in the paid asset. If `cancellation.paymentStatus` is `confirmation_pending`, the original payment is still being reconciled: do not say it was unpaid or refunded. A refund due is not a completed refund; verify `refund.status`. Cancellation can discard a late provider result but does not promise that upstream work was reversed. Completed results cannot be cancelled.
+
+Phone, video, email and diagnostic operations still allow cancellation only before a payment claim. This research deadline does not hang up calls or end meetings. Never report cancellation from conversation text alone, and never pay a cancelled quote.
 
 ## Durable inboxes
 

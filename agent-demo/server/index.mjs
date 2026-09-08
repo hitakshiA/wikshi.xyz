@@ -5,7 +5,7 @@ import {decideDraft,approvedDrafts} from './drafts.mjs';
 import {Sponsor} from './sponsor.mjs';
 import {beginActionTurn,withBatchPreparation,prepareEmailBatch,assertPaymentGroupReady} from './action-gate.mjs';
 import {readInboxRoute} from './inbox-routes.mjs';
-import {cancelSessionOperation} from './cancel-operation.mjs';
+import {cancelSessionOperation,parseCancellationRequest,isResearchOperation,rememberOperation} from './cancel-operation.mjs';
 import {validateCompletionIds,completionMessage} from './completion-turn.mjs';
 
 const sessions=new Sessions();
@@ -67,14 +67,18 @@ export const server=createServer(async(req,res)=>{
       const [_,id,action]=match;
       if(!session.operations.has(id))throw new SessionError('Operation not found.',404);
       if(req.method==='GET'&&!action)return send(200,await refresh(session,id));
-      if(req.method==='POST'&&action==='cancel')return await sessions.exclusive(token,async s=>send(200,await cancelSessionOperation(s,id,api)));
+      if(req.method==='POST'&&action==='cancel'){
+        const options=parseCancellationRequest(await body(req));
+        const cancel=async s=>{const result=await cancelSessionOperation(s,id,api,options);for(const operation of result.operationUpdates)s.emit?.({type:'operation',operation});return send(200,result);};
+        return isResearchOperation(session.operations.get(id))?await cancel(session):await sessions.exclusive(token,cancel);
+      }
       if(req.method==='POST'&&action==='sponsor')return await sessions.exclusive(token,async s=>{
         const data=await body(req);if(data.approved!==true)throw new SessionError('Approve this sponsored payment first.');
         assertPaymentGroupReady(s,id);
         let op=await refresh(s,id);if(op.status!=='awaiting_payment')return send(200,op);
         const payment=await sponsor.payment(s,op,data.currency);
         op=await api(s,`/v1/operations/${id}/pay`,{payment});
-        s.operations.set(id,{...s.operations.get(id),...op});return send(200,s.operations.get(id));
+        return send(200,rememberOperation(s,op));
       });
     }
     if(req.method==='GET'&&path==='/chat-api/sponsorship')return send(200,{...sponsor.info(),account:session.sponsorAccount||null});
@@ -87,7 +91,7 @@ export const server=createServer(async(req,res)=>{
         if(stored.status!=='awaiting_payment')return send(200,await refresh(s,id));
         const q=stored.paymentRequired?.accepts?.find(q=>q.asset===data.payment?.accepted?.asset);
         if(!q||JSON.stringify(q)!==JSON.stringify(data.payment.accepted))throw new SessionError('The signed quote does not match this operation.');
-        const op=await api(s,`/v1/operations/${id}/pay`,{payment:data.payment});s.operations.set(id,{...stored,...op});return send(200,s.operations.get(id));
+        const op=await api(s,`/v1/operations/${id}/pay`,{payment:data.payment});return send(200,rememberOperation(s,op));
       });
     }
     if(req.method==='GET'){

@@ -4,9 +4,9 @@ import {USDC} from './payments/blocky.mjs';
 export class ProviderError extends Error {constructor(uncertain=false){super('service_execution_failed');this.uncertain=uncertain;}}
 export class Providers {
   constructor(env,fetchImpl=fetch) {this.env=env;this.fetch=fetchImpl;}
-  async request(url, {method='GET',headers={},body}={}) {
+  async request(url, {method='GET',headers={},body,signal}={}) {
     try {
-      const response=await this.fetch(url,{method,headers:{'Content-Type':'application/json',...headers},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000),redirect:'error'});
+      const response=await this.fetch(url,{method,headers:{'Content-Type':'application/json',...headers},body:body?JSON.stringify(body):undefined,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000),redirect:'error'});
       if (method==='DELETE' && response.status===404)return {};
       if (!response.ok) throw new ProviderError(method!=='GET' && response.status>=500);
       if (response.status===204) return {};
@@ -33,7 +33,7 @@ export class Providers {
     do{id=randomUUID();address=`hello-${id.slice(0,8)}@${domain.toLowerCase()}`;}while(store.inboxForAddress(address));
     return store.createPayerInbox(payer,auth,{id,kind:'inbox',displayName,address,createdAt:new Date().toISOString()});
   }
-  async execute(op,store) {
+  async execute(op,store,{signal}={}) {
     const {service,input}=op.data;
     if(service==='network.inspect') {
       const base='https://testnet.mirrornode.hedera.com/api/v1';
@@ -45,7 +45,7 @@ export class Providers {
       const contents=service==='discovery.contents';
       const category={'discovery.people':'people','discovery.companies':'company'}[service];
       const body=contents?{ids:input.urls,text:{maxCharacters:10000}}:{query:input.query,numResults:input.limit,type:'auto',...(category?{category}:{}),contents:{text:{maxCharacters:3000}}};
-      const data=await this.request(`https://api.exa.ai/${contents?'contents':'search'}`,{method:'POST',headers:{'x-api-key':this.env.EXA_API_KEY},body});
+      const data=await this.request(`https://api.exa.ai/${contents?'contents':'search'}`,{method:'POST',headers:{'x-api-key':this.env.EXA_API_KEY},body,signal});
       if(!Array.isArray(data.results))throw new ProviderError(true);
       return {done:true,result:{results:data.results.map(r=>({title:r.title,url:r.url,text:r.text,publishedAt:r.publishedDate})),contentTrust:'untrusted-source-content'}};
     }
@@ -53,7 +53,7 @@ export class Providers {
       const paths={'contacts.enrich':'search','contacts.phone':'phone-search','contacts.reverse':'email-search','contacts.company':'dataset-search'};
       const params={first_name:input.firstName,last_name:input.lastName,company_url:input.domain,linkedin_url:input.linkedinUrl,email:input.email,title:input.title,page:input.page};
       const query=new URLSearchParams(Object.entries(params).filter(([,v])=>v!==undefined));
-      const data=await this.request(`https://app.quickenrich.io/api/employees/${paths[service]}?${query}`,{headers:{Authorization:`Bearer ${this.env.QUICKENRICH_API_KEY}`}});
+      const data=await this.request(`https://app.quickenrich.io/api/employees/${paths[service]}?${query}`,{headers:{Authorization:`Bearer ${this.env.QUICKENRICH_API_KEY}`},signal});
       if(data.success!==true || !data.data || typeof data.data!=='object')throw new ProviderError();
       const fields={first_name:'firstName',last_name:'lastName',title:'title',email:'email',employee_phone:'phone',employee_phone_type:'phoneType',employee_linkedin:'profileUrl',email_verification_date:'emailVerifiedAt',company_url:'companyUrl',company_name:'companyName',company_phone:'companyPhone',industry:'industry',employee_count:'employeeCount',city:'city',region_code:'region',country_code:'country'};
       const rows=(Array.isArray(data.data)?data.data:[data.data]).slice(0,20).map(r=>Object.fromEntries(Object.entries(fields).map(([key,label])=>[label,r[key]==='N/A'?null:r[key]??null])));
