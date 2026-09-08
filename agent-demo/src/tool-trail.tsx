@@ -10,6 +10,5 @@ export function ToolTrail({runs}:{runs:ToolRun[]}) {
   return <section className="tool-trail" aria-label="Agent tool activity">
     <details><summary><span className={`tool-dot ${active.length?'tool-running':''}`} aria-hidden="true">{active.length?'':failed?'!':'✓'}</span>{active.length?`${active.length} ${active.length===1?'step':'steps'} in progress`:`${runs.length} ${runs.length===1?'step':'steps'} ${failed?'reviewed':'completed'}`}<span className="tool-chevron" aria-hidden="true">⌄</span></summary>
     <ol>{runs.map(t=><li key={t.id} data-status={t.status}><div><strong>{labels[t.name]||t.name.replaceAll('_',' ')}</strong><span>{t.status==='running'?'Working':t.status==='finished'?'Done':t.status==='failed'?'Failed':'Interrupted'}{t.durationMs!==undefined?` · ${(t.durationMs/1000).toFixed(1)}s`:''}</span></div><p>{t.summary|| (t.status==='interrupted'?'Connection ended before this step was confirmed.':'')}</p></li>)}</ol></details>
-    <Presence show={active.length>0}><ToolActivity name={active[0]?.name.replaceAll('_',' ')||''}/></Presence>
   </section>;
 }

@@ -16,6 +16,31 @@
 @media(max-width:600px){.batch-review-footer{align-items:flex-start;flex-direction:column}}
 @media(prefers-reduced-motion:reduce){.payment-surface .payment-card,.payment-surface .payment-card:hover{transform:none!important;transition:none!important}}
 .presence{animation:surface-arrive 240ms cubic-bezier(.16,1,.3,1) both}
+.draft-letter{display:flex;flex-direction:column;position:relative;padding:18px;align-self:stretch}
+.draft-letter:hover{transform:translateY(-2px)}
+.draft-content{flex:1;min-width:0}
+.draft-content>summary{list-style:none;cursor:pointer}
+.draft-content>summary::-webkit-details-marker{display:none}
+.draft-content h4{font-size:18px;margin:12px 0;overflow-wrap:anywhere}
+.draft-content>summary>span{display:flex;justify-content:space-between;font-size:12px;color:var(--forest);padding:8px 0}
+.draft-content[open] .letter-body{animation:surface-arrive 240ms cubic-bezier(.16,1,.3,1) both;max-height:260px}
+.draft-letter .draft-actions{margin-top:auto;padding-top:16px;order:3;position:sticky;bottom:0;background:inherit}
+.draft-letter .draft-actions button{min-height:44px}
+.draft-feedback{order:2}
+.draft-revision-loader{position:absolute;inset:0;border-radius:inherit;background:#f8f6ecef;display:flex;align-items:center;justify-content:center;gap:12px;z-index:2;animation:surface-arrive 240ms cubic-bezier(.16,1,.3,1) both}
+.draft-revision-loader>.bird{position:relative;width:72px;height:90px}
+.draft-letter>.presence:has(.draft-revision-loader){position:absolute;inset:0;z-index:2;border-radius:inherit}
+.draft-revision-loader>span{font-size:13px}
+.email-mini{max-width:520px;padding:18px}
+.email-mini-heading{display:flex;align-items:center;gap:16px}
+.email-mini-heading>.bird{width:64px;height:76px;flex:none}
+.email-mini-heading strong{font-size:18px}
+.email-mini-heading p{font-size:13px;overflow-wrap:anywhere;margin-top:6px}
+.sent-email-details{margin-top:12px;font-size:13px}
+.sent-email-details>p{white-space:pre-wrap;max-height:260px;overflow:auto;margin-top:12px}
+.email-working{display:flex;align-items:center;gap:12px;font-size:13px}
+.working-dots{display:inline-flex;gap:4px}.working-dots i{width:5px;height:5px;border-radius:50%;background:currentColor;animation:pulse 1.2s infinite}.working-dots i:nth-child(2){animation-delay:.15s}.working-dots i:nth-child(3){animation-delay:.3s}
+@media(prefers-reduced-motion:reduce){.draft-content[open] .letter-body,.draft-revision-loader,.working-dots i{animation:none!important}}
 .presence[data-leaving]{animation:surface-leave 160ms ease-in both;pointer-events:none}
 .message,.draft-batch,.operation{animation:surface-arrive 280ms cubic-bezier(.16,1,.3,1) both}
 .tool-trail{margin:12px 0 20px;color:var(--forest)}

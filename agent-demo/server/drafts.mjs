@@ -1,5 +1,13 @@
 import {randomUUID} from 'node:crypto';
 import {SessionError} from './sessions.mjs';
+export function requestedRevision(session,id){
+  const draft=typeof id==='string'?session.drafts?.get(id):null;
+  if(!draft||draft.decision!=='changes_requested')throw new SessionError('Choose an email awaiting your requested changes.',409);
+  return draft;
+}
+export function assertRevisionTool(session,name,input){
+  if(session.revisionId&&(name!=='revise_email_draft'||input.id!==session.revisionId))throw new SessionError('Only revise the requested email in this turn.',409);
+}
 
 export function createDraftBatch(session,drafts) {
   if(!Array.isArray(drafts)||drafts.length<1||drafts.length>4)throw new SessionError('Prepare between one and four email drafts per batch.');

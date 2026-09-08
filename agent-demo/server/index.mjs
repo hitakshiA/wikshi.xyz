@@ -1,7 +1,7 @@
 import {createServer} from 'node:http';
 import {Sessions,SessionError} from './sessions.mjs';
 import {createRuntime,api,refresh} from './runtime.mjs';
-import {decideDraft,approvedDrafts} from './drafts.mjs';
+import {requestedRevision,decideDraft,approvedDrafts} from './drafts.mjs';
 import {Sponsor} from './sponsor.mjs';
 import {beginActionTurn,withBatchPreparation,prepareEmailBatch,assertPaymentGroupReady} from './action-gate.mjs';
 import {readInboxRoute} from './inbox-routes.mjs';
@@ -32,9 +32,12 @@ export const server=createServer(async(req,res)=>{
       return await sessions.exclusive(token,async s=>{
         if(activeTurns>=maxConcurrent)throw new SessionError('All agents are busy. Please try again shortly.',503);
         const completion=Object.hasOwn(data,'completionIds')?await validateCompletionIds(s,data.completionIds,id=>refresh(s,id)):null;
+        const revision=Object.hasOwn(data,'revisionId')?requestedRevision(s,data.revisionId):null;
+        if(Object.hasOwn(data,'revisionId')&&(!revision||revision.decision!=='changes_requested'||completion))throw new SessionError('Choose an email awaiting your requested changes.',409);
         const emit=event=>{if(!res.destroyed)res.write(JSON.stringify(event)+'\n');};
         // An emit indirection keeps follow-up turns on their own response stream.
         s.emit=emit;s.agent??=createRuntime(s,event=>s.emit?.(event));beginActionTurn(s);
+        s.revisionId=revision?.id;
         if(completion){s.readOnlyContinuation=true;s.actionTurn.claimed=true;}
         activeTurns++;s.turns=(s.turns||0)+1;
         const timeout=setTimeout(()=>s.agent.abort('Response time limit'),120_000);
@@ -43,8 +46,8 @@ export const server=createServer(async(req,res)=>{
         if(completion)for(const operation of completion)emit({type:'operation',operation});
         const keepAlive=setInterval(()=>emit({type:'heartbeat'}),15_000);
         const onClose=()=>{if(!res.writableEnded)s.agent.abort('Connection closed');};res.on('close',onClose);
-        try{const result=await s.agent.run(completion?completionMessage(completion.map(op=>op.id)):data.message);if(result.status==='failed')emit({type:'error',message:'The agent could not finish this request. Please try again.'});emit({type:'done'});}catch{emit({type:'error',message:'The agent could not connect. Your message has not triggered a payment.'});}
-        finally{clearTimeout(timeout);clearInterval(keepAlive);activeTurns--;s.emit=null;s.readOnlyContinuation=false;res.end();res.off('close',onClose);}
+        try{const result=await s.agent.run(completion?completionMessage(completion.map(op=>op.id)):revision?`Revise only email draft ${revision.id} using revise_email_draft. Requested changes: ${revision.feedback}. Preserve its recipient. Update the existing draft, do not prepare any other action. The interface shows the update in its card; no separate explanation is needed.`:data.message);if(result.status==='failed')emit({type:'error',message:'The agent could not finish this request. Please try again.'});emit({type:'done'});}catch{emit({type:'error',message:'The agent could not connect. Your message has not triggered a payment.'});}
+        finally{clearTimeout(timeout);clearInterval(keepAlive);activeTurns--;s.emit=null;s.readOnlyContinuation=false;s.revisionId=null;res.end();res.off('close',onClose);}
       });
     }
     const match=/^\/chat-api\/operations\/([a-f0-9-]{36})(?:\/(pay|sponsor|cancel))?$/.exec(path);
