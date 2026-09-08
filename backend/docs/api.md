@@ -2,7 +2,7 @@
 
 Base URL: `https://api.wikshi.xyz`. Payments accept USDC (`0.0.429274`, 6 decimals) or native HBAR (`0.0.0`, 8 decimals) on Hedera testnet only. Money is an integer string in the selected asset's smallest unit: 1 USDC = 1,000,000 atomic units; 1 HBAR = 100,000,000 tinybars. Read `/v1/services` for actual availability and each service's `prices` array. Legacy `rateAtomic/currency/decimals` fields continue to describe USDC only; an HBAR-only service has a null legacy rate. Disabled services reject before charging. `network.inspect` retrieves public chain data; it is not a substitute for live-testing communication providers.
 
-Prices are independently configured demo rates, not an exchange-rate conversion. A quote offers each configured currency in `paymentRequired.accepts`; select exactly one. Its entire requirement must be echoed unchanged in `payment.accepted`. The server locks the asset, rate, and amount atomically on the first valid payment attempt. Subsequent retries cannot switch currencies or pay twice. Old single-USDC quotes and purchases retain their original terms. Final live HBAR payment/refund verification is pending; local tests do not establish facilitator settlement success.
+Prices are independently configured demo rates, not an exchange-rate conversion. A quote offers each configured currency in `paymentRequired.accepts`; select exactly one. Its entire requirement must be echoed unchanged in `payment.accepted`. The server locks the asset, rate, and amount atomically on the first valid payment attempt. Subsequent retries cannot switch currencies or pay twice. Old single-USDC quotes and purchases retain their original terms. Establish payment and refund success from each operation's independent confirmation, not configured credentials or local test results.
 
 ## Authentication without signup
 
@@ -19,6 +19,8 @@ Generate 32 random bytes as base64url (43 characters). Keep them secret and send
 7. `GET /v1/operations/<id>` with the credential returns status, result, signed receipt and refund state. `paymentOptions` describes the original quote choices; `payment` identifies the locked asset, amount, decimals and confirmation flag after payment begins. Refunds include their asset, currency and decimals. Retrieval has no second payment. Poll every 5-10 seconds.
 
 A timeout is not proof of failure. Query the original operation; do not sign another transfer for a payment in progress. A transaction cannot fund a second operation, even at the same price.
+
+The caller creates the bearer credential before quoting; the API does not issue a new retrieval credential with a meeting. Persist the original service/input, operation ID, idempotency key, and credential reference privately: operation retrieval does not return the original input. `/chat-api/*` and the hosted chat's draft, suggestion, and sponsorship controls are not public external-agent endpoints.
 
 ## Service inputs
 
@@ -95,3 +97,5 @@ Native HBAR Mirror transfer balances include network fees. Confirmation separate
 `GET /v1/receipt-key` returns the Ed25519 public JWK. Verify `receipt.signature` against the decoded bytes of `receipt.signedPayload`, not reserialized JSON. Trust the key obtained over Wikshi TLS. The signed receipt commits to usage and result hash, not independent proof of provider honesty.
 
 Refund statuses: `pending`, `submitting`, `confirming`, `confirmed`. Persisted transaction bytes/identity precede submission. An ambiguous outcome is reconciled against Mirror, never retried with a new transaction. Receipt reports refund due; the operation's separate refund state reports actual settlement.
+
+Continue retrieving a completed or cancelled operation while its refund is unresolved. Service completion is not financial settlement. A confirmed refund exposes `refund.transaction` and returns to the actual confirmed payer, including a sponsor when it paid. The 120-second research deadline does not limit refund confirmation. If a client stops monitoring, retain the operation for later reconciliation and report the refund as pending rather than issuing another purchase.

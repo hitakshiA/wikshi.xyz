@@ -12,3 +12,9 @@ node_modules
 *.tsbuildinfo
 *.pem
 *.key
+AGENTS.md
+CLAUDE.md
+.impeccable.md
+.claude
+.codex
+skills-lock.json

@@ -11,3 +11,29 @@ out/
 *.key
 .vercel
 .env*.local
+
+# Local agent instructions, plans, research, and generated tooling state
+AGENTS.md
+CLAUDE.md
+.impeccable.md
+.agents/
+.claude/
+.codex/
+skills-lock.json
+planning-artifacts/
+exa-results/
+videos/
+docs/
+backend/scripts/hosted-video-pilot.mjs
+backend/scripts/mission-purchase.mjs
+backend/src/hosted-pilot.mjs
+
+# Private runtime records and security audit output
+.runtime/
+*.sqlite*
+*.log
+*.har
+*.p12
+*.pfx
+*.keystore
+gitleaks-report*
