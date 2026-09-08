@@ -12,6 +12,29 @@ const browser=await chromium.launch();
 
 async function fixture(width,scenario,{clock=false,backendDeadline=true}={}){
   const page=await browser.newPage({viewport:{width,height:1000},reducedMotion:'reduce'});
+  // Deliver the real response events in separate chunks, keeping the final
+  // done event back long enough to detect an early raw-data attachment.
+  await page.addInitScript(()=>{
+    const original=window.fetch;
+    window.fetch=async(...args)=>{
+      const response=await original(...args);
+      if(!String(args[0]).endsWith('/chat-api/message'))return response;
+      const text=await response.text();
+      if(!text.includes('I found three useful results'))return new Response(text,{headers:response.headers,status:response.status});
+      const encoder=new TextEncoder();
+      return new Response(new ReadableStream({async start(controller){
+        const events=text.trim().split('\n');
+        for(const event of events){
+          if(JSON.parse(event).type==='done'){
+            await new Promise(resolve=>setTimeout(resolve,800));
+            window.__earlyResearchAttachment=!!document.querySelector('.research-attachment');
+          }
+          controller.enqueue(encoder.encode(event+'\n'));
+        }
+        controller.close();
+      }}),{headers:response.headers,status:response.status});
+    };
+  });
   const epoch=Date.now();
   if(clock)await page.clock.install({time:new Date(epoch)});
   const state={turns:0,reads:0,sponsors:0,cancels:[],requests:[],errors:[],violations:[],completed:false,cancelled:false,deadline:null,fundedAt:null,heldStarted:null,releaseHeld:null};
@@ -103,6 +126,7 @@ async function automaticResult(width,scenario){
   const {page,state}=await fixture(width,scenario);
   await page.getByText(summary,{exact:true}).waitFor({timeout:20_000});
   await page.locator('.research-attachment').waitFor();
+  assert.equal(await page.evaluate(()=>window.__earlyResearchAttachment),false,'records stay hidden while the answer is streaming');
   assert(state.reads>=(scenario==='network-retry'?3:2));
   assert.equal(state.turns,2);
   assert.equal(state.cancels.length,0);

@@ -124,7 +124,7 @@ Phone, video, email and diagnostic operations still allow cancellation only befo
 
 Only create an inbox when the user requests email or an inbox. First read `GET /v1/inboxes` with the same private credential. Reuse an existing inbox. If none exists, check live availability, quote `email.inbox` with a `displayName`, and wait for approval and confirmed completion before preparing email sends. Research, contact lookups, calls, meetings and diagnostic purchases do not create an inbox. Do not buy an unrelated service to obtain email access.
 
-The explicit inbox purchase creates one persistent inbox linked to its verified payer. Read `inbox.id` and `inbox.address` from the operation or `GET /v1/inboxes`. Continue using that same inbox when the chat switches USDC/HBAR or between a wallet and sponsorship. Never create an extra mailbox for a payment-method change. Existing inboxes and messages remain available; a new credential can recover an existing payer inbox after a confirmed payment only if it does not already have an inbox. Inbox creation itself does not send email.
+The explicit inbox purchase creates one persistent inbox linked to its verified payer. Read `inbox.id` and `inbox.address` from the operation or `GET /v1/inboxes`. Continue using that same inbox when the chat switches USDC/HBAR or between a wallet and sponsorship. Never create an extra mailbox for a payment-method change. Existing inboxes and messages remain available; a new credential can recover an existing payer inbox after a separately approved and completed `email.inbox` purchase only if it does not already have an inbox. Inbox creation itself does not send email.
 
 Use the owned inbox ID for `email.send`. Read replies through:
 

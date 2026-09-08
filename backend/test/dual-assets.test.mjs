@@ -94,7 +94,10 @@ test('same payer owns one durable inbox across currencies and credentials',async
   const created=await engine.quote('email.inbox',{displayName:'My agent'},credential,randomBytes(16).toString('hex'));
   await pay(engine,created,USDC);await engine.tick();const first=store.get(created.id);
   const other=randomBytes(32).toString('base64url');const second=await pay(engine,await quote(engine,other),HBAR,other);
-  assert.equal(first.data.inbox.id,second.data.inbox.id);assert.equal(store.inboxes(hash(other))[0].id,first.data.inbox.id);
+  assert.equal(second.data.inbox,undefined);assert.deepEqual(store.inboxes(hash(other)),[]);
+  const inboxQuote=await engine.quote('email.inbox',{displayName:'My agent'},other,randomBytes(16).toString('hex'));
+  await pay(engine,inboxQuote,HBAR,other);await engine.tick();
+  assert.equal(store.inboxes(hash(other))[0].id,first.data.inbox.id);
 });
 
 for(const asset of [USDC,HBAR])test(`${asset}: metered and full refunds retain asset across retry/recovery`,async()=>{

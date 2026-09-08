@@ -33,6 +33,7 @@ test('public recipients need no allowlist but inbox ownership and consent remain
   Object.assign(env,{RESEND_API_KEY:'fixture',WIKSHI_EMAIL_READY:'true',WIKSHI_PRICE_EMAIL:'1',WIKSHI_TESTNET_RECIPIENTS:'old@example.com'});
   const inboxId='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   store.putResource(inboxId,hash(credential),{id:inboxId,kind:'inbox',address:'sender@wikshi.xyz'});
+  store.authorizeInbox(inboxId,hash(credential));
   const input={inboxId,to:'new-recipient@example.net',subject:'Public demo',text:'A consented conversation.',consent:true};
   const op=await engine.quote('email.send',input,credential,randomBytes(16).toString('hex'));assert.equal(op.state,'awaiting_payment');
   await assert.rejects(engine.quote('email.send',input,'stranger',randomBytes(16).toString('hex')),/inbox_not_found/);
@@ -59,8 +60,11 @@ test('only explicit paid inbox creation provisions mail; payment confirmation al
   store.putMessage(inbox.id,'keep-after-recovery',{text:'Existing private mail'});
   const other=await quote(engine);other.data.payment={confirmed:true,payer:'0.0.999',tx:'historical'};other.auth='new-authorized-credential-hash';other.state='completed';
   store.db.prepare('UPDATE operations SET auth=? WHERE id=?').run(other.auth,other.id);store.save(other);
-  engine.recover();assert.equal(store.inboxes(other.auth)[0].id,inbox.id);
-  assert.equal(engine.view(store.get(other.id)).inbox.id,inbox.id);
+  store.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.id,other.auth);
+  store.db.prepare('DELETE FROM explicit_inbox_access').run();
+  engine.recover();assert.deepEqual(store.inboxes(other.auth),[]);
+  assert.equal(store.inboxes(hash(credential))[0].id,inbox.id);
+  assert.equal(engine.view(store.get(other.id)).inbox,undefined);
   assert.equal(store.messages(inbox.id)[0].text,'Existing private mail');
   assert.equal(store.resource(inbox.id,'stranger'),null);
 });
@@ -95,7 +99,7 @@ test('non-email service payments and recovery never create an inbox',async()=>{
     store.close();
   }
 });
-test('a confirmed research payment recovers an existing payer inbox without provisioning another',async()=>{
+test('a confirmed research payment cannot recover an existing payer inbox',async()=>{
   let confirmed=false;const {engine,store,env}=setup({confirm:async()=>confirmed});
   Object.assign(env,{WIKSHI_EMAIL_READY:'true',WIKSHI_EMAIL_DOMAIN:'mail.wikshi.xyz',RESEND_API_KEY:'fixture',RESEND_WEBHOOK_SECRET:'whsec_fixture'});
   const providers=new Providers(env),inbox=providers.provisionInbox('0.0.999','previous-owner',store);
@@ -103,8 +107,10 @@ test('a confirmed research payment recovers an existing payer inbox without prov
   const op=await quote(engine);await engine.pay(op.id,credential,{});
   assert.equal(store.resource(inbox.id,hash(credential)),null);
   confirmed=true;await engine.reconcilePayment(store.get(op.id));
-  assert.equal(store.resource(inbox.id,hash(credential)).address,inbox.address);
-  assert.equal(engine.view(store.get(op.id)).inbox.id,inbox.id);
+  assert.equal(store.resource(inbox.id,hash(credential)),null);
+  assert.equal(engine.view(store.get(op.id)).inbox,undefined);
+  env.WIKSHI_PRICE_EMAIL='1';
+  await assert.rejects(engine.quote('email.send',{inboxId:inbox.id,to:'test@example.com',subject:'Test',text:'Test',consent:true},credential,randomBytes(16).toString('hex')),/inbox_not_found/);
   assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM payer_inboxes').get().n,1);
   assert.equal(store.resource(inbox.id,'stranger'),null);
 });
@@ -126,6 +132,8 @@ test('an inbox quote cannot charge after the chat recovers an existing inbox',as
   const op=await engine.quote('email.inbox',{displayName:'My agent'},credential,randomBytes(16).toString('hex'));
   const providers=new Providers(env),inbox=providers.provisionInbox('0.0.999','another-credential',store);
   store.bindPayer(hash(credential),'0.0.999');
+  assert.equal(store.primaryInbox(hash(credential)),null);
+  providers.provisionInbox('0.0.999',hash(credential),store);
   await assert.rejects(engine.pay(op.id,credential,{}),/inbox_already_available/);
   assert.equal(counts().settles,0);
   assert.equal(store.primaryInbox(hash(credential)).id,inbox.id);

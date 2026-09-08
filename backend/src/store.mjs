@@ -15,6 +15,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS guests (hash TEXT PRIMARY KEY, operation TEXT NOT NULL UNIQUE, used INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, auth TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS resource_grants (resource TEXT NOT NULL, auth TEXT NOT NULL, PRIMARY KEY(resource,auth));
+      CREATE TABLE IF NOT EXISTS explicit_inbox_access (resource TEXT NOT NULL, auth TEXT NOT NULL, PRIMARY KEY(resource,auth));
       CREATE TABLE IF NOT EXISTS payer_inboxes (payer TEXT PRIMARY KEY, resource TEXT NOT NULL UNIQUE, address_hash TEXT NOT NULL UNIQUE);
       CREATE TABLE IF NOT EXISTS inbox_aliases (address_hash TEXT PRIMARY KEY, resource TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS verified_payers (auth TEXT NOT NULL, payer TEXT NOT NULL, PRIMARY KEY(auth,payer));
@@ -47,15 +48,15 @@ export class Store {
   }
   event(id,state) {this.db.prepare('INSERT INTO events(operation,state,at) VALUES(?,?,?)').run(id,state,Date.now());}
   list(states) {return this.db.prepare(`SELECT id FROM operations WHERE state IN (${states.map(()=>'?').join(',')}) ORDER BY updated LIMIT 30`).all(...states).map(row=>this.get(row.id));}
-  resource(id, auth) {const row=this.db.prepare('SELECT data FROM resources WHERE id=? AND (auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?))').get(id,auth,auth);return row ? this.open(row.data,id) : null;}
+  resource(id, auth) {const row=this.db.prepare('SELECT data FROM resources WHERE id=? AND (auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?))').get(id,auth,auth);if(!row)return null;const value=this.open(row.data,id);return value.kind==='inbox'&&!this.db.prepare('SELECT 1 FROM explicit_inbox_access WHERE resource=? AND auth=?').get(id,auth)?null:value;}
   putResource(id, auth, data) {this.db.prepare('INSERT INTO resources VALUES(?,?,?)').run(id,auth,this.seal(data,id));}
   bindPayer(auth,payer) {
     this.db.prepare('INSERT OR IGNORE INTO verified_payers VALUES(?,?)').run(auth,payer);
-    // One chat keeps its first inbox when its payer switches between a wallet
-    // and sponsorship. Historical grants remain valid, but no new one is added.
-    if(this.primaryInbox(auth))return;
-    const inbox=this.db.prepare('SELECT resource FROM payer_inboxes WHERE payer=?').get(payer);
-    if(inbox)this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.resource,auth);
+    // Payment identity is not an inbox purchase or authorization.
+  }
+  authorizeInbox(id,auth) {
+    this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(id,auth);
+    this.db.prepare('INSERT OR IGNORE INTO explicit_inbox_access VALUES(?,?)').run(id,auth);
   }
   payerInbox(payer) {
     const row=this.db.prepare('SELECT r.id,r.data FROM resources r JOIN payer_inboxes p ON p.resource=r.id WHERE p.payer=?').get(payer);
@@ -66,10 +67,7 @@ export class Store {
       const primary=this.primaryInbox(auth);if(primary)return primary;
       let inbox=this.payerInbox(payer);
       if(!inbox){this.putResource(resource.id,auth,resource);this.db.prepare('INSERT INTO payer_inboxes VALUES(?,?,?)').run(payer,resource.id,hash(resource.address.toLowerCase()));inbox=resource;}
-      for(const verified of this.db.prepare('SELECT auth FROM verified_payers WHERE payer=?').all(payer)){
-        if(!this.primaryInbox(verified.auth))this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.id,verified.auth);
-      }
-      this.db.prepare('INSERT OR IGNORE INTO resource_grants VALUES(?,?)').run(inbox.id,auth);
+      this.authorizeInbox(inbox.id,auth);
       return inbox;
     });
   }
@@ -89,7 +87,7 @@ export class Store {
       return inbox;
     });
   }
-  inboxes(auth) {return this.db.prepare("SELECT id,data FROM resources WHERE auth=? OR EXISTS(SELECT 1 FROM resource_grants WHERE resource=resources.id AND auth=?) ORDER BY resources.rowid").all(auth,auth).map(r=>this.open(r.data,r.id)).filter(r=>r.kind==='inbox').map(r=>({id:r.id,address:r.address,displayName:r.displayName}));}
+  inboxes(auth) {return this.db.prepare("SELECT id,data FROM resources WHERE EXISTS(SELECT 1 FROM explicit_inbox_access WHERE resource=resources.id AND auth=?) ORDER BY resources.rowid").all(auth).map(r=>this.open(r.data,r.id)).filter(r=>r.kind==='inbox').map(r=>({id:r.id,address:r.address,displayName:r.displayName}));}
   primaryInbox(auth) {const inbox=this.inboxes(auth)[0];return inbox?this.resource(inbox.id,auth):null;}
   putMessage(inbox,source,data) {
     const id=hash(`${inbox}:${source}`).slice(0,32).replace(/^(........)(....)(....)(....)(............)$/,'$1-$2-$3-$4-$5');

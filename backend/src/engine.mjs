@@ -168,10 +168,10 @@ export class Engine {
     this.confirmWork.set(op.id,task);return task;
   }
   attachInbox(op) {
-    // A research, contact or conversation purchase can recover access to an
-    // existing payer inbox, but only email.inbox is allowed to create one.
+    // Only expose inboxes explicitly purchased with this credential.
     const inbox=this.store.primaryInbox(op.auth);
     if(inbox && op.data.inbox?.id!==inbox.id){op.data.inbox={id:inbox.id,address:inbox.address};this.store.save(op);}
+    else if(!inbox && op.data.inbox){delete op.data.inbox;this.store.save(op);}
   }
   finish(op,result,seconds=undefined) {
     if(isResearchService(op.data.service)){op=this.refreshResearch(op);if(op.state==='cancelled')return op;this.clearResearchDeadline(op.id);}
@@ -274,6 +274,13 @@ export class Engine {
     this.refundWork.set(id,task);return task;
   }
   recover() {
+    // Migrate only proven, completed inbox purchases. Old implicit payer
+    // grants and mailbox contents remain stored but do not authorize access.
+    for(const row of this.store.db.prepare("SELECT id FROM operations WHERE state='completed'").all()){
+      const op=this.store.get(row.id);
+      if(op.data.service==='email.inbox' && op.data.payment?.confirmed && op.data.result?.inboxId)
+        this.store.authorizeInbox(op.data.result.inboxId,op.auth);
+    }
     let pending;
     while((pending=this.store.list(['dispatching','joining','settling_payment','verifying_payment'])).length){
       for(const op of pending){op.state=['dispatching','joining'].includes(op.state)?'execution_unknown':'confirming_payment';this.store.save(op);}

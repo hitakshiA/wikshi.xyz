@@ -34,6 +34,8 @@ test('one chat retains its inbox across wallet and sponsor payers without extra 
   store.bindPayer('wallet-owner','0.0.111');store.bindPayer('sponsor-owner','0.0.222');
   const wallet=providers.provisionInbox('0.0.111','wallet-owner',store),sponsor=providers.provisionInbox('0.0.222','sponsor-owner',store);
   store.bindPayer('one-chat','0.0.111');store.bindPayer('one-chat','0.0.222');store.bindPayer('one-chat','0.0.333');
+  assert.deepEqual(store.inboxes('one-chat'),[]);
+  providers.provisionInbox('0.0.111','one-chat',store);
   assert.deepEqual(store.inboxes('one-chat').map(box=>box.id),[wallet.id]);
   assert.equal(providers.provisionInbox('0.0.222','one-chat',store).id,wallet.id);
   assert.equal(providers.provisionInbox('0.0.333','one-chat',store).id,wallet.id);
@@ -53,16 +55,16 @@ test('racing explicit inbox provisions for one credential reuse the first durabl
   assert.equal(store.inboxes('one-chat').length,1);
   assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM resources').get().n,1);
 });
-test('historical multi-inbox grants remain readable and canonical ordering survives later payer binds',()=>{
+test('historical implicit grants do not expose inboxes; stored messages are preserved',()=>{
   const store=makeStore(),providers=new Providers(env);
   const first=providers.provisionInbox('0.0.111','first-owner',store),second=providers.provisionInbox('0.0.222','second-owner',store);
   for(const inbox of [first,second])store.db.prepare('INSERT INTO resource_grants VALUES(?,?)').run(inbox.id,'legacy-chat');
   store.putMessage(second.id,'preserved-history',{text:'Still accessible'});
   store.bindPayer('legacy-chat','0.0.333');
-  assert.deepEqual(store.inboxes('legacy-chat').map(box=>box.id),[first.id,second.id]);
-  assert.equal(store.primaryInbox('legacy-chat').id,first.id);
+  assert.deepEqual(store.inboxes('legacy-chat'),[]);
+  assert.equal(store.primaryInbox('legacy-chat'),null);
   assert.equal(store.messages(second.id)[0].text,'Still accessible');
-  assert.equal(store.resource(second.id,'legacy-chat').id,second.id);
+  assert.equal(store.resource(second.id,'legacy-chat'),null);
 });
 test('explicit inbox creation requires mail readiness and a quoted price; voice requires configuration',()=>{
   const entries=catalog({...env,WIKSHI_MERCHANT_ACCOUNT:'0.0.1',WIKSHI_MERCHANT_KEY:'fixture',WIKSHI_PRICE_INBOX:'1',WIKSHI_PRICE_PHONE_SECOND:'1',AGENTPHONE_API_KEY:'fixture'});
