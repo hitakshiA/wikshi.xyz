@@ -140,11 +140,3 @@ The [environment template](backend/.env.example) lists service credentials, read
 The API listens on loopback port 8080. Use a TLS reverse proxy to make it accessible remotely. Keep runtime configuration, payer keys, retrieval credentials, and database contents out of git.
 
 To check a live purchase, buy an enabled service and retrieve its result. Verify the receipt signature and look up the payment transaction on HashScan. For a metered purchase, check the refund transaction too. Passing unit tests alone doesn't establish that either transfer settled.
-
-### Current limits
-
-Payments use testnet assets, but emails and calls reach real people and require consent. A contact lookup may find no match. An accepted email may not be delivered.
-
-Research has a two-minute execution deadline and supports paid cancellation with refund reconciliation. Video meetings last at most five minutes, but guest links aren't guaranteed single-use. A phone call's prepaid ceiling limits the bill, not how long the call can last. The [API reference](backend/docs/api.md) explains these limits in full.
-
-Agents discover Wikshi through the catalog and skill file. Receipts are signed off-chain rather than published to HCS. UCP, A2A/ACP negotiation, on-chain agent identity, and Scheduled Transactions aren't implemented.
