@@ -120,7 +120,7 @@ export function OperationCard({op,request,onUpdate,onCheck,onPaid,onEmail,onRefr
   function renderCard(){
   const title=calling?'A conversation in motion':meeting?'An invitation for your guest':email?'A note from your agent':/people|contact|enrich/.test(op.service)?'People & contacts':'Company research';
   if(email&&!waiting&&op.status!=='cancelled'&&op.status!=='expired')return <article className="operation email-mini tactile-card" data-operation={op.id}>
-    <div className="email-mini-heading"><Bird state="email"/><div><strong>{op.service==='email.inbox'?(op.status==='completed'?'Your agent’s inbox is ready':'Creating your agent’s inbox'):op.status==='completed'?'Email accepted':'Email update'}</strong><p>{op.service==='email.inbox'?(op.result?.address||'Setting up a place for replies.'):(op.input?.to||'Your recipient')}</p></div></div>
+    <div className="email-mini-heading"><Bird state="email"/><div><strong>{op.service==='email.inbox'?(op.status==='completed'?'Your agent’s inbox is ready':'Creating your agent’s inbox'):op.status==='completed'?'Email sent':'Email update'}</strong><p>{op.service==='email.inbox'?(op.result?.address||'Setting up a place for replies.'):(op.input?.to||'Your recipient')}</p></div></div>
     {op.service!=='email.inbox'&&<details className="sent-email-details"><summary>{op.input?.subject||'Read email'}</summary><p>{op.input?.text}</p></details>}
     {active&&<div className="email-working" role="status">Working<span className="working-dots"><i/><i/><i/></span></div>}
     {op.error&&<p role="alert">{op.error.code||'This email request could not finish.'}</p>}

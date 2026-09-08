@@ -1,0 +1,9 @@
+.workspace-meetings{border-bottom:1px solid var(--line);padding:24px 0}
+.workspace-meetings h3{margin:0 0 16px}
+.workspace-meetings ul{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.workspace-meetings li{display:grid;gap:8px;padding:16px;border:1px solid var(--line);border-radius:12px;min-width:0}
+.workspace-meetings li>strong{font-size:13px;line-height:1.5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.workspace-meetings li>span{font-size:12px}
+.workspace-meetings button{justify-self:start;min-height:44px;padding:8px 16px;border:1px solid var(--line);border-radius:24px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer}
+.workspace-meetings button:disabled{opacity:.55;cursor:wait}
+.workspace-meetings button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
