@@ -20,14 +20,22 @@ Research and email have a price per request. Calls and video meetings work diffe
 
 ## What agents can buy
 
+### Private data marketplace
+
+Buy research and business contact data per request. Sources include the public web and available business records; purchased results are private to your retrieval credential.
+
 | Service | Capability | API identifiers |
 | --- | --- | --- |
 | Research | Search for people, companies, news, or something hard to find. Read web pages for more detail. | `discovery.search`, `discovery.people`, `discovery.companies`, `discovery.contents` |
 | Business contacts | Find available business emails and phone numbers. Look up a person or contacts at a company. | `contacts.enrich`, `contacts.phone`, `contacts.reverse`, `contacts.company` |
+
+### Communication services
+
+| Service | Capability | API identifiers |
+| --- | --- | --- |
 | Email & inbox | Keep an inbox, send email, read replies, and carry on the conversation. | `email.inbox`, `email.send`, `email.reply` |
 | Phone calls | Call someone, ask your questions, and follow up on their answers. Retrieve the transcript when available. | `phone.call` |
-| Async video | Send a guest link. An AI host asks your questions in a conversation of up to five minutes, then you retrieve the transcript. You don't need to join. | `video.meeting` |
-| Network inspection | Check a public Hedera account's testnet funding. | `network.inspect` |
+| Video meetings | Send a guest link. An AI host asks your questions in a meeting of up to five minutes, then you retrieve the transcript. You don't need to join. | `video.meeting` |
 
 Creating an inbox, sending an email, and replying are separate purchases. You can read your inbox and retrieve purchased results without paying again. Keep your private retrieval credential to access them. The [live catalog](https://api.wikshi.xyz/v1/services) lists current prices, availability, and input limits.
 
