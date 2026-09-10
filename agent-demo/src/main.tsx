@@ -13,6 +13,7 @@ import {StarterPage} from './starter-page';
 import {SuggestionButtons} from './suggestion-buttons';
 import {normalizeSuggestions,type Suggestion} from './suggestions.mjs';
 import {ResearchPanel} from './research-panel';
+import {ResearchBudget} from './research-budget';
 import {readyToSummarize,hasStarted,continuationPrompt,deferResearchResult,isResearch,mergeOperation} from './operation-flow.mjs';
 
 type Message={id:string;role:'user'|'assistant';text:string;tools?:ToolRun[]};
@@ -51,6 +52,7 @@ function App(){
   }
   const inboxHeading=useRef<HTMLButtonElement>(null);
   const bottom=useRef<HTMLDivElement>(null),composerInput=useRef<HTMLTextAreaElement>(null),pending=useRef(false),sessionToken=useRef('');
+  useEffect(()=>{const form=composerInput.current?.closest('form'),conversation=form?.parentElement;if(!form||!conversation)return;const measure=()=>conversation.style.setProperty('--composer-height',`${form.getBoundingClientRect().height}px`);const observer=new ResizeObserver(measure);observer.observe(form);measure();return()=>observer.disconnect();},[]);
   useEffect(()=>{const resize=()=>{const el=composerInput.current;if(!el)return;el.style.height='auto';el.style.height=`${Math.min(el.scrollHeight,window.innerHeight*.4)}px`;};resize();window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[input]);
   async function request(path:string,data?:unknown,method=data?'POST':'GET',signal?:AbortSignal){
     const r=await fetch('/chat-api'+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${sessionToken.current}`},body:data?JSON.stringify(data):undefined,signal});const value=await r.json();if(!r.ok)throw Object.assign(Error(value.error||'Request failed.'),{status:r.status});return value;
@@ -116,6 +118,7 @@ function App(){
           {inboxes.length?inboxes.map((box,i)=><button className="inbox-account-button" key={box.id||i} onClick={()=>{setActiveInboxId(box.id);setWorkspaceView('inbox');}}><strong>{box.email||box.address||box.emailAddress}</strong><span>Open inbox ↗</span></button>):<p>Your agent’s address will appear here when you create an inbox.</p>}
         </section>
         <MeetingTasks operations={operations} disabled={busy||!token} onCheck={prompt=>send(prompt)}/>
+        <ResearchBudget request={request} disabled={busy||!token}/>
         <WorkspaceActivity operations={operations.filter(op=>!retiredBatchOperations.current.has(op.id))}/>
         <section className="workspace-wallet"><h3>Pay your way.</h3><p>Sign each request in your wallet, or ask Wikshi to sponsor it.</p><div className="token-marks"><img src="/wikshi/protocols/USDC Token.svg" alt=""/>USDC<img className="hbar-mark" src="/wikshi/protocols/hbar-mark.svg" alt=""/>HBAR</div></section>
         <p className="workspace-foot">Chat stays in this tab. Keep any meeting links or receipts you need before closing it.</p>

@@ -46,6 +46,7 @@ export function createApi(engine) {
       return send(200,{network:'hedera:testnet',access:'public-testnet',services:engine?.services()||[],status:engine?'configured':'configuration_required'});
     }
     if(!engine)throw new ApiError('not_found',404);
+    if(req.method==='GET' && req.url==='/v1/directory')return send(200,engine.directory());
     const videoWebhook=/^\/v1\/webhooks\/video\/([A-Za-z0-9_-]{43})$/.exec(req.url||'');
     if(videoWebhook){
       res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type');

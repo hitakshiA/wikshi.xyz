@@ -107,7 +107,7 @@ try{
     assert.deepEqual(payments.map(payment=>payment.id),[first.id,second.id]);
     assert.equal(await page.locator('.email-batch-payment .payment-wrap').count(),1);
     assert.equal(await page.locator('.payment-wrap').count(),1,'An expired remainder stays in its existing group.');
-    assert.equal(await page.locator(`[data-operation="${first.id}"] .state-label`).textContent(),'completed');
+    assert.equal(await page.locator(`[data-operation="${first.id}"] .email-mini-heading strong`).textContent(),'Email sent');
     await page.locator('.sponsor-dialog[open] [role="alert"]').filter({hasText:'The quote expired.'}).waitFor();
     await page.getByRole('button',{name:'Back',exact:true}).click();
     await refresh.click();
@@ -121,7 +121,7 @@ try{
 
     await page.getByRole('button',{name:'Sponsor this',exact:true}).click();
     await page.getByRole('button',{name:'Approve sponsored payment',exact:true}).click();
-    await page.waitForFunction(()=>document.querySelectorAll('.state-label').length===2&&[...document.querySelectorAll('.state-label')].every(label=>label.textContent==='completed'));
+    await page.waitForFunction(()=>document.querySelectorAll('.email-mini-heading strong').length===2&&[...document.querySelectorAll('.email-mini-heading strong')].every(label=>label.textContent==='Email sent'));
     await page.waitForFunction(()=>document.querySelectorAll('.payment-wrap').length===0);
     assert.deepEqual(payments.map(payment=>payment.id),[first.id,second.id,replacement.id]);
     assert(payments.every(payment=>payment.body.approved===true&&payment.body.currency==='USDC'));

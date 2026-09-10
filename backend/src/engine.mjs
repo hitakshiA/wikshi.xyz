@@ -4,6 +4,7 @@ import {ApiError,catalog,validate,emailAddress} from './catalog.mjs';
 import {Blocky,NETWORK,ASSETS} from './payments/blocky.mjs';
 import {inspectPayment,confirmTransfer} from './payments/hedera.mjs';
 import {cancelUnpaidOperation,cancelResearchOperation,isResearchService} from './cancel.mjs';
+import {AuditPublisher,HcsTransport,receiptRecord,refundRecord,signedDirectory} from './audit.mjs';
 
 export class Engine {
   constructor({store,env,providers,blocky=new Blocky(),inspect=inspectPayment,confirm=confirmTransfer,refundSigner}) {
@@ -12,6 +13,7 @@ export class Engine {
     const seed=createHmac('sha256',store.key).update('wikshi-receipts-ed25519-v1').digest();
     this.signingKey=createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),seed]),format:'der',type:'pkcs8'});
     this.receiptKey=createPublicKey(this.signingKey).export({format:'jwk'});
+    this.audit=new AuditPublisher(store,env.WIKSHI_HCS_TOPIC?new HcsTransport({topic:env.WIKSHI_HCS_TOPIC,account:env.WIKSHI_MERCHANT_ACCOUNT,key:env.WIKSHI_MERCHANT_KEY}):null);
   }
   clearResearchDeadline(id){clearTimeout(this.researchTimers.get(id));this.researchTimers.delete(id);}
   armResearchDeadline(op){
@@ -57,6 +59,16 @@ export class Engine {
     await Promise.all(work);
   }
   services(){return catalog(this.env);}
+  directory(){
+    const directory=signedDirectory(this);
+    const id=this.audit.enqueue({version:1,type:'directory',manifestHash:directory.hash});
+    return {...directory,anchor:this.audit.proof(id)};
+  }
+  auditProof(op){
+    if(op.created<this.audit.startedAt)return [];
+    const records=[receiptRecord(op),refundRecord(op)].filter(Boolean);
+    return records.map(record=>({record,anchor:this.audit.proof(this.audit.enqueue(record))}));
+  }
   authorize(id,credential) {
     const op=this.store.get(id);
     if(!op || op.auth!==hash(credential))throw new ApiError('not_found',404);
@@ -71,7 +83,7 @@ export class Engine {
       paymentOptions:(data.offers||[{requirements:data.requirements,price:data.price}]).map(o=>({...ASSETS[o.requirements.asset],amountAtomic:o.requirements.amount,rateAtomic:o.price.rateAtomic})),
       payment:data.payment?{...ASSETS[data.requirements.asset],amountAtomic:data.requirements.amount,confirmed:data.payment.confirmed===true}:undefined,
       result:data.result,inbox:data.inbox,receipt:data.receipt,refund:data.refund?{...ASSETS[data.requirements.asset],status:data.refund.status,amountAtomic:data.refund.amount,transaction:data.refund.status==='confirmed'?data.refund.tx:undefined}:undefined,
-      error:data.error?{code:data.error}:undefined};
+      audit:this.auditProof(op),error:data.error?{code:data.error}:undefined};
   }
   challenge(op) {return {x402Version:2,resource:{url:`${this.env.WIKSHI_PUBLIC_ORIGIN}/v1/operations/${op.id}/pay`,description:'Wikshi service operation',mimeType:'application/json'},accepts:op.data.offers?.map(o=>o.requirements)||[op.data.requirements],extensions:{wikshi:{transactionMemo:`wikshi:${op.id}`,operationId:op.id}}};}
   async quote(service,input,credential,idem) {
@@ -302,6 +314,11 @@ export class Engine {
     // is blocked on a provider. Timers enforce the exact research deadline;
     // this sweep and independent refund work also recover across restarts.
     this.sweepResearchDeadlines();void this.reconcileResearchCancellations();
+    if(this.audit.transport){
+      this.directory();
+      for(const {id} of this.store.db.prepare("SELECT id FROM operations WHERE state IN ('completed','failed','cancelled')").all())this.auditProof(this.store.get(id));
+      void this.audit.tick();
+    }
     if(this.busy)return;this.busy=true;
     try {
       for(const candidate of ['confirming_payment','queued','running','awaiting_guest','awaiting_payment'].flatMap(state=>this.store.list([state]))) {

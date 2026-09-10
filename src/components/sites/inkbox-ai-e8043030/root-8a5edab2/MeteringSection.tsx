@@ -30,7 +30,7 @@ export function MeteringSection() {
       </div>
       <div className="wikshi-section-shell metering-details">
         <p><strong>Know the ceiling.</strong> Review the rate and maximum charge before authorizing payment.</p>
-        <p><strong>Keep the evidence.</strong> Match the session’s measured usage to its payment and refund receipts.</p>
+        <p><strong>Check the evidence.</strong> Verify signed usage receipts, HCS records, and payment and refund transfers on Hedera.</p>
         <p><strong>Get the result.</strong> Use your private credential for status and transcripts, not a public transaction link.</p>
       </div>
     </section>
