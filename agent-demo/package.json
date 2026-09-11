@@ -6,6 +6,7 @@
     "dev": "vite --host 127.0.0.1",
     "server": "node --env-file-if-exists=.env.local server/index.mjs",
     "build": "vite build",
+    "postbuild": "node ../scripts/prepare-static-permissions.mjs chat",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

@@ -2,7 +2,7 @@
   "name": "wikshi-web",
   "version": "0.1.0",
   "private": true,
-  "scripts": {"dev":"next dev --hostname 127.0.0.1", "build":"next build", "start":"next start --hostname 127.0.0.1", "typecheck":"tsc --noEmit"},
+  "scripts": {"dev":"next dev --hostname 127.0.0.1", "build":"next build", "postbuild":"node scripts/prepare-static-permissions.mjs web", "start":"next start --hostname 127.0.0.1", "typecheck":"tsc --noEmit"},
   "dependencies": {"next":"16.3.0", "react":"19.2.4", "react-dom":"19.2.4", "html-react-parser":"^5.2.10", "clsx":"^2.1.1", "tailwind-merge":"^3.5.0", "class-variance-authority":"^0.7.1", "@radix-ui/react-slot":"^1.2.0"},
   "devDependencies": {"typescript":"^5", "@types/node":"^24", "@types/react":"^19", "@types/react-dom":"^19", "cheerio":"^1.2.0", "tailwindcss":"^4", "@tailwindcss/postcss":"^4"}
 }
