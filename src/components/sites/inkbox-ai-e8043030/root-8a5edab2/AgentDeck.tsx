@@ -43,8 +43,9 @@ export function AgentDeck({agents}: {agents: Agent[]}) {
   }
 
   return <div className="agent-picker" id="quickstart-panel">
+    <p className="agent-picker-or">or</p>
     <p className="agent-picker-intro" id="agent-picker-label">Bring your own agent</p>
-    <div className="agent-deck" role="radiogroup" aria-labelledby="agent-picker-label" aria-describedby="agent-picker-help"
+    <div className="agent-deck" role="radiogroup" aria-labelledby="agent-picker-label"
       onPointerDown={event => {
         if (!event.isPrimary || event.button !== 0) return;
         gesture.current = {id: event.pointerId, x: event.clientX, y: event.clientY};
@@ -76,12 +77,6 @@ export function AgentDeck({agents}: {agents: Agent[]}) {
         </button>;
       })}
     </div>
-    <div className="agent-picker-controls">
-      <button className="agent-step" type="button" aria-label="Previous agent" onClick={() => choose(selected - 1)}><span aria-hidden="true">←</span></button>
-      <p className="agent-selection" aria-live="polite" aria-atomic="true"><strong>{agents[selected].name}</strong><span>{selected + 1} / {agents.length}</span></p>
-      <button className="agent-step" type="button" aria-label="Next agent" onClick={() => choose(selected + 1)}><span aria-hidden="true">→</span></button>
-    </div>
-    <p className="agent-picker-help" id="agent-picker-help">Pick your agent. Copy the prompt. Make it yours.</p>
     <button className="agent-copy" type="button" onClick={copy} disabled={copyState === 'copying'} aria-busy={copyState === 'copying'}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">{copyState === 'copied' ? <path d="m5 12 4 4L19 6"/> : <><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4"/></>}</svg>
       <span aria-live="polite">{copyState === 'copied' ? 'Prompt copied' : copyState === 'copying' ? 'Copying…' : copyState === 'failed' ? 'Try copying again' : 'Copy prompt'}</span>
