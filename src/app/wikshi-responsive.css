@@ -1,5 +1,9 @@
 /* Phone-first refinements of the existing Inkbox composition, not a new layout. */
 .quickstart-marquee-track, .quickstart-marquee-group { display: contents; }
+.quickstart-copy-action { display: flex; justify-content: center; margin-top: 24px; }
+.quickstart-copy-action button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 12px 24px; border: 1px solid #f7f4eb80; border-radius: 999px; background: #233e31; color: #f7f4eb; font-weight: 600; cursor: pointer; }
+.quickstart-copy-action button:hover { background: #304f3e; }
+.quickstart-copy-action button:focus-visible { outline: 2px solid #edb38a; outline-offset: 4px; }
 .quickstart-marquee-copy { display: none; }
 .quickstart-marquee-copy button:first-child img { width: 24px; height: 24px; transform: scale(1.3); }
 

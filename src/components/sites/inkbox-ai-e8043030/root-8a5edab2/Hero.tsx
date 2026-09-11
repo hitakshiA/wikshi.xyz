@@ -16,12 +16,8 @@ function elements(nodes: DOMNode[]): Element[] {
 
 const allElements = elements(source);
 const tabs = allElements.filter((node) => node.attribs.role === 'tab');
-const paragraphs = allElements.filter((node) => node.name === 'p' && 'aria-hidden' in node.attribs);
-const commandParagraphs = paragraphs.slice(tabs.length);
-const copyButtons = allElements.filter((node) => node.name === 'button' && node.attribs.role !== 'tab');
-
 // Agent selection is compatibility context, not a different user mission.
-const commands = commandParagraphs.map(() => wikshiPrompt());
+const prompt = wikshiPrompt();
 
 export function Hero() {
   const [activeTab, setActiveTab] = useState(0);
@@ -102,7 +98,7 @@ export function Hero() {
 
   async function copyCommand() {
     try {
-      await navigator.clipboard.writeText(commands[activeTab]);
+      await navigator.clipboard.writeText(prompt);
       setCopyState('Copied');
     } catch {
       setCopyState('Retry');
@@ -145,22 +141,12 @@ export function Hero() {
         >{children()}</button>;
       }
       if (node.attribs.role === 'tabpanel') {
-        return <div {...props} aria-labelledby={`quickstart-tab-${activeTab}`}>{children()}</div>;
-      }
-      const paragraphIndex = paragraphs.indexOf(node);
-      if (paragraphIndex !== -1) {
-        const selected = paragraphIndex % tabs.length === activeTab;
-        return <p {...props} aria-hidden={!selected}
-          className={node.attribs.class.replace(/\b(?:invisible|visible)\b/g, selected ? 'visible' : 'invisible')}
-        >{paragraphIndex >= tabs.length ? commands[paragraphIndex - tabs.length] : children()}</p>;
-      }
-      if (copyButtons.includes(node)) {
-        return <button {...props} onClick={copyCommand}
-          aria-label={copyState === 'Copied' ? 'Copied to clipboard' : copyState === 'Retry' ? 'Copy failed, try again' : node === copyButtons[1] ? 'Copy' : 'Copy prompt'}
-        >{children()}</button>;
-      }
-      if (node.name === 'span' && node.parent === copyButtons[1]) {
-        return <span {...props} aria-live="polite">{copyState}</span>;
+        return <div id="quickstart-panel" role="tabpanel" aria-labelledby={`quickstart-tab-${activeTab}`} className="quickstart-copy-action">
+          <button type="button" onClick={copyCommand}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4"/></svg>
+            <span aria-live="polite">{copyState === 'Copied' ? 'Prompt copied' : copyState === 'Retry' ? 'Try copying again' : 'Copy prompt'}</span>
+          </button>
+        </div>;
       }
     },
   };
