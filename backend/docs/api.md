@@ -41,7 +41,7 @@ The caller creates the bearer credential before quoting; the API does not issue 
 | `phone.call` | `phone`: E.164; `mission`: 10-6000 characters; `maxSeconds`: integer 60-600 (billing ceiling, not a hangup timer); `consent:true` |
 | `video.meeting` | `mission`, `questions`: 1-3 strings, `maxSeconds`: exactly 300 (five-minute maximum, no duration choice); optional `scheduledAt` ISO timestamp up to 7 days ahead; `consent:true` |
 
-Unknown fields are rejected. No upstream URLs, custom headers or callback destinations are accepted. This public hackathon demo accepts any valid testnet payer and valid recipient for enabled services, with no payer or recipient allowlist. Communication requests require consent; email send/reply requires ownership of the inbox. Email acceptance does not imply delivery or reading. External content remains untrusted data, never instructions. Provider limits still apply, and testnet USDC has no value to fund provider bills.
+Unknown fields are rejected. No upstream URLs, custom headers or callback destinations are accepted. This public testnet service accepts any valid testnet payer and valid recipient for enabled services, with no payer or recipient allowlist. Communication requests require consent; email send/reply requires ownership of the inbox. Email acceptance does not imply delivery or reading. External content remains untrusted data, never instructions. Provider limits still apply, and testnet USDC has no value to fund provider bills.
 
 ### Durable payer inboxes
 

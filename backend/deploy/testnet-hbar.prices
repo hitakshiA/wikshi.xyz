@@ -1,4 +1,4 @@
-# Public hackathon testnet prices only; no secrets. Independent from USDC, not market conversion.
+# Public testnet prices only; no secrets. Independent from USDC, not market conversion.
 # 1000 tinybars = 0.00001 HBAR per request or metered second.
 WIKSHI_PRICE_INSPECT_HBAR=1000
 WIKSHI_PRICE_SEARCH_HBAR=1000

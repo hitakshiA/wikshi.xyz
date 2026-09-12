@@ -23,7 +23,7 @@ function setup(options={}){
   return {engine,store,blocky,env,providers,counts:()=>({settles,dispatches})};
 }
 const quote=e=>e.quote('network.inspect',{account:'0.0.7284970'},credential,randomBytes(16).toString('hex'));
-test('public hackathon accepts valid payers outside the former allowlist',async()=>{
+test('public testnet service accepts valid payers outside the former allowlist',async()=>{
   const {engine,env,counts}=setup();env.WIKSHI_TESTNET_PAYERS='0.0.7284970';const op=await quote(engine);
   await engine.pay(op.id,credential,{});
   assert.equal(counts().settles,1);
