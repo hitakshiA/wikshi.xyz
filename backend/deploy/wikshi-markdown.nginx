@@ -1,0 +1,4 @@
+# Keep the public agent skill readable in browsers and HTTP clients.
+types {
+    text/plain md;
+}

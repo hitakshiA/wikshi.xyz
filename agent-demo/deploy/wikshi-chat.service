@@ -1,0 +1,31 @@
+[Unit]
+Description=Wikshi temporary agent chat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wikshi-chat
+Group=wikshi-chat
+SupplementaryGroups=wikshi
+WorkingDirectory=/opt/wikshi/agent-demo
+EnvironmentFile=/etc/wikshi/chat.env
+Environment=NODE_ENV=production
+Environment=HOME=/var/lib/wikshi-chat
+ExecStart=/opt/wikshi-node/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/wikshi-chat
+InaccessiblePaths=/etc/wikshi/backend.env /var/lib/wikshi
+UMask=0077
+MemoryMax=1200M
+TasksMax=128
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
